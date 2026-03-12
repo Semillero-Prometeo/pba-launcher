@@ -1,0 +1,15 @@
+[submodule "pba-ms-gateway"]
+	path = pba-ms-gateway
+	url = https://github.com/Semillero-Prometeo/pba-ms-gateway.git
+[submodule "pba-ms-auth"]
+	path = pba-ms-auth
+	url = https://github.com/Semillero-Prometeo/pba-ms-auth.git
+[submodule "pba-ms-management"]
+	path = pba-ms-management
+	url = https://github.com/Semillero-Prometeo/pba-ms-management.git
+[submodule "pba-ms-robotics"]
+	path = pba-ms-robotics
+	url = https://github.com/Semillero-Prometeo/pba-ms-robotics.git
+[submodule "pmas-web-main"]
+	path = pmas-web-main
+	url = https://github.com/Semillero-Prometeo/pmas-web-main.git
