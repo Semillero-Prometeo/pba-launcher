@@ -1,0 +1,89 @@
+services:
+  # =============================
+  # DATABASE
+  # =============================
+  db:
+    image: postgres:17.1-alpine
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+
+  # =============================
+  # NATS SERVER
+  # =============================
+  nats-server:
+    image: nats:2.12.5-alpine3.22
+    ports:
+      - "8222:8222"
+    volumes:
+      - ./nats.conf:/etc/nats/nats.conf
+    command: "-c /etc/nats/nats.conf"
+
+  # =============================
+  # MAFCS MS GATEWAY
+  # =============================
+  pba-ms-gateway:
+    build:
+      context: ./mafcs-ms-gateway
+      dockerfile: Dockerfile.dev
+    ports:
+      - "${MS_GATEWAY_PORT}:${MS_GATEWAY_PORT}"
+      - "9230:9230"
+    volumes:
+      - ./mafcs-ms-gateway/src:/usr/src/app/src
+      - /usr/src/app/node_modules
+    command: npm run start:debug
+    environment:
+      - NATS_SERVER=nats://nats-server:4222
+      - PORT=${MS_GATEWAY_PORT}
+      - NODE_ENV=development
+      - DATABASE_URL=${MS_GATEWAY_DATABASE_URL}
+
+  # =============================
+  # MAFCS MS AUTH
+  # =============================
+  pba-ms-auth:
+    build:
+      context: ./mafcs-ms-auth
+      dockerfile: Dockerfile.dev
+    ports:
+      - "${MS_AUTH_PORT}:${MS_AUTH_PORT}"
+      - "9231:9231"
+    volumes:
+      - ./mafcs-ms-auth/src:/usr/src/app/src
+      - /usr/src/app/node_modules
+    command: npm run start:debug
+    environment:
+      - NATS_SERVER=nats://nats-server:4222
+      - PORT=${MS_AUTH_PORT}
+      - NODE_ENV=development
+      - DATABASE_URL=${MS_AUTH_DATABASE_URL}
+
+  # =============================
+  # PBA MS MANAGEMENT
+  # =============================
+  pba-ms-management:
+    build:
+      context: ./pba-ms-management
+      dockerfile: Dockerfile.dev
+    ports:
+      - "${MS_MANAGEMENT_PORT}:${MS_MANAGEMENT_PORT}"
+      - "9232:9232"
+    volumes:
+      - ./pba-ms-management/src:/usr/src/app/src
+      - /usr/src/app/node_modules
+    command: npm run start:debug
+    environment:
+      - NATS_SERVER=nats://nats-server:4222
+      - PORT=${MS_MANAGEMENT_PORT}
+      - NODE_ENV=development
+      - DATABASE_URL=${MS_MANAGEMENT_DATABASE_URL}
+
+volumes:
+  pba-ms-gateway-node_modules:
+  pba-ms-auth-node_modules:
+  pba-ms-management-node_modules:
