@@ -62,6 +62,8 @@ services:
       - PORT=${MS_AUTH_PORT}
       - NODE_ENV=development
       - DATABASE_URL=${MS_AUTH_DATABASE_URL}
+      - SECRET=${MS_AUTH_SECRET}
+      - RESTORE_PASSWORD_SECRET=${MS_AUTH_RESTORE_PASSWORD_SECRET}
 
   # =============================
   # PBA MS MANAGEMENT
