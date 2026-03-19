@@ -28,13 +28,13 @@ services:
   # =============================
   pba-ms-gateway:
     build:
-      context: ./mafcs-ms-gateway
+      context: ./pba-ms-gateway
       dockerfile: Dockerfile.dev
     ports:
       - "${MS_GATEWAY_PORT}:${MS_GATEWAY_PORT}"
       - "9230:9230"
     volumes:
-      - ./mafcs-ms-gateway/src:/usr/src/app/src
+      - ./pba-ms-gateway/src:/usr/src/app/src
       - /usr/src/app/node_modules
     command: npm run start:debug
     environment:
@@ -44,17 +44,17 @@ services:
       - DATABASE_URL=${MS_GATEWAY_DATABASE_URL}
 
   # =============================
-  # MAFCS MS AUTH
+  # PBA MS AUTH
   # =============================
   pba-ms-auth:
     build:
-      context: ./mafcs-ms-auth
+      context: ./pba-ms-auth
       dockerfile: Dockerfile.dev
     ports:
       - "${MS_AUTH_PORT}:${MS_AUTH_PORT}"
       - "9231:9231"
     volumes:
-      - ./mafcs-ms-auth/src:/usr/src/app/src
+      - ./pba-ms-auth/src:/usr/src/app/src
       - /usr/src/app/node_modules
     command: npm run start:debug
     environment:
