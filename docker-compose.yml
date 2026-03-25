@@ -42,6 +42,9 @@ services:
       - PORT=${MS_GATEWAY_PORT}
       - NODE_ENV=development
       - DATABASE_URL=${MS_GATEWAY_DATABASE_URL}
+      - SECRET=${MS_GATEWAY_SECRET}
+      - RESTORE_PASSWORD_SECRET=${MS_GATEWAY_RESTORE_PASSWORD_SECRET}
+      - PROJECT_ID=${MS_GATEWAY_PROJECT_ID}
 
   # =============================
   # PBA MS AUTH
@@ -64,6 +67,7 @@ services:
       - DATABASE_URL=${MS_AUTH_DATABASE_URL}
       - SECRET=${MS_AUTH_SECRET}
       - RESTORE_PASSWORD_SECRET=${MS_AUTH_RESTORE_PASSWORD_SECRET}
+      - PROJECT_ID=${MS_AUTH_PROJECT_ID}
 
   # =============================
   # PBA MS MANAGEMENT
