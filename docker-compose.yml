@@ -99,7 +99,7 @@ services:
     volumes:
       - ./pba-ms-robotics:/usr/src/app
       - ${GCLOUD_CONFIG_PATH:-~/.config/gcloud}:/root/.config/gcloud
-    command: uvicorn app:app --host 0.0.0.0 --port ${MS_ROBOTICS_PORT} --reload --reload-dir /usr/src/app --reload-exclude .venv
+    command: uvicorn src.app:app --host 0.0.0.0 --port ${MS_ROBOTICS_PORT} --reload --reload-dir /usr/src/app --reload-exclude .venv
     environment:
       - NATS_SERVER=nats://nats-server:4222
       - PORT=${MS_ROBOTICS_PORT}
@@ -109,3 +109,4 @@ volumes:
   pba-ms-gateway-node_modules:
   pba-ms-auth-node_modules:
   pba-ms-management-node_modules:
+  pba-ms-robotics-node_modules:
