@@ -1,0 +1,20 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/pba-ms-robotics/.venv/bin/python",
+  "python.terminal.activateEnvironment": true,
+
+  "python.analysis.extraPaths": ["${workspaceFolder}/pba-ms-robotics/src"],
+  "python.analysis.typeCheckingMode": "basic",
+
+  "ruff.enable": true,
+  "ruff.path": ["${workspaceFolder}/pba-ms-robotics/.venv/bin/ruff"],
+
+  "mypy-type-checker.path": [
+    "${workspaceFolder}/pba-ms-robotics/.venv/bin/mypy"
+  ],
+  "mypy-type-checker.importStrategy": "fromEnvironment",
+
+  "pytest.testing.enabled": true,
+  "pytest.testing.pytestPath": "${workspaceFolder}/pba-ms-robotics/.venv/bin/pytest",
+  "pytest.testing.cwd": "${workspaceFolder}/pba-ms-robotics",
+  "pytest.testing.pytestArgs": ["tests"]
+}
