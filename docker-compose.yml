@@ -89,6 +89,22 @@ services:
       - NODE_ENV=development
       - DATABASE_URL=${MS_MANAGEMENT_DATABASE_URL}
 
+  pba-ms-robotics:
+    build:
+      context: ./pba-ms-robotics
+      dockerfile: Dockerfile.dev
+    ports:
+      - "${MS_ROBOTICS_PORT}:${MS_ROBOTICS_PORT}"
+      - "9233:9233"
+    volumes:
+      - ./pba-ms-robotics:/usr/src/app
+      - ${GCLOUD_CONFIG_PATH:-~/.config/gcloud}:/root/.config/gcloud
+    command: uvicorn app:app --host 0.0.0.0 --port ${MS_ROBOTICS_PORT} --reload --reload-dir /usr/src/app --reload-exclude .venv
+    environment:
+      - NATS_SERVER=nats://nats-server:4222
+      - PORT=${MS_ROBOTICS_PORT}
+      - ENV=development
+
 volumes:
   pba-ms-gateway-node_modules:
   pba-ms-auth-node_modules:
