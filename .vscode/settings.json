@@ -12,9 +12,11 @@
     "${workspaceFolder}/pba-ms-robotics/.venv/bin/mypy"
   ],
   "mypy-type-checker.importStrategy": "fromEnvironment",
-
-  "pytest.testing.enabled": true,
-  "pytest.testing.pytestPath": "${workspaceFolder}/pba-ms-robotics/.venv/bin/pytest",
-  "pytest.testing.cwd": "${workspaceFolder}/pba-ms-robotics",
-  "pytest.testing.pytestArgs": ["tests"]
+  "[python]": {
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    },
+    "editor.defaultFormatter": "charliermarsh.ruff"
+  }
 }
