@@ -104,6 +104,9 @@ services:
       - NATS_SERVER=nats://nats-server:4222
       - PORT=${MS_ROBOTICS_PORT}
       - ENV=development
+    privileged: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   pba-ms-gateway-node_modules:
