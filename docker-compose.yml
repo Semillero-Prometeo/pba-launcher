@@ -36,6 +36,9 @@ services:
     volumes:
       - ./pba-ms-gateway/src:/usr/src/app/src
       - /usr/src/app/node_modules
+    depends_on:
+      - db
+      - nats-server
     command: npm run start:debug
     environment:
       - NATS_SERVER=nats://nats-server:4222
