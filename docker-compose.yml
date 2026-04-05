@@ -111,6 +111,22 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  # =============================
+  # PMAS WEB MAIN (Angular)
+  # =============================
+  pmas-web-main:
+    build:
+      context: ./pmas-web-main
+      dockerfile: Dockerfile.dev
+    ports:
+      - "${WEB_MAIN_PORT}:${WEB_MAIN_PORT}"
+    volumes:
+      - ./pmas-web-main:/usr/src/app
+      - /usr/src/app/node_modules
+    command: npm run start -- --host 0.0.0.0 --port ${WEB_MAIN_PORT} --poll 2000
+    environment:
+      - WEB_MAIN_PORT=${WEB_MAIN_PORT}
+
 volumes:
   pba-ms-gateway-node_modules:
   pba-ms-auth-node_modules:
