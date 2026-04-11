@@ -1,4 +1,47 @@
 {
   "version": "0.1.0",
-  "configurations": []
+  "configurations": [
+    {
+      "type": "node",
+      "request": "attach",
+      "name": "Debug Gateway (REST)",
+      "address": "localhost",
+      "port": 9230,
+      "restart": true,
+      "remoteRoot": "/usr/src/app",
+      "localRoot": "${workspaceFolder}/pba-ms-gateway",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "sourceMaps": true
+    },
+    {
+      "type": "node",
+      "request": "attach",
+      "name": "Debug Auth (REST)",
+      "address": "localhost",
+      "port": 9231,
+      "restart": true,
+      "remoteRoot": "/usr/src/app",
+      "localRoot": "${workspaceFolder}/pba-ms-auth",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "sourceMaps": true
+    },
+    {
+      "type": "node",
+      "request": "attach",
+      "name": "Debug Management (REST)",
+      "address": "localhost",
+      "port": 9232,
+      "restart": true,
+      "remoteRoot": "/usr/src/app",
+      "localRoot": "${workspaceFolder}/pba-ms-management",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "sourceMaps": true
+    }
+  ]
 }
