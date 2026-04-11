@@ -18,3 +18,7 @@
 	path = pmas-web-main
 	url = https://github.com/Semillero-Prometeo/pmas-web-main.git
 	branch = dev
+[submodule "pba-arduino-codes"]
+	path = pba-arduino-codes
+	url = https://github.com/Semillero-Prometeo/pba-arduino-codes.git
+	branch = dev
