@@ -110,6 +110,9 @@ services:
       - NATS_SERVER=nats://nats-server:4222
       - PORT=${MS_ROBOTICS_PORT}
       - ENV=development
+      - PIPER_MODEL_PATH=${MS_ROBOTICS_PIPER_MODEL_PATH}
+      - ESPEAK_VOICE=${MS_ROBOTICS_ESPEAK_VOICE}
+      - VOICE_SKIP_PLAYBACK=${MS_ROBOTICS_VOICE_SKIP_PLAYBACK}
       # Sin hardware de audio, usar VOICE_SKIP_PLAYBACK=1 para validar solo TTS (ver pba-ms-robotics/.env.template).
       # - VOICE_SKIP_PLAYBACK=1
     privileged: true
