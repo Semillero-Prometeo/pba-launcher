@@ -110,9 +110,14 @@ services:
       - NATS_SERVER=nats://nats-server:4222
       - PORT=${MS_ROBOTICS_PORT}
       - ENV=development
+      # Sin hardware de audio, usar VOICE_SKIP_PLAYBACK=1 para validar solo TTS (ver pba-ms-robotics/.env.template).
+      # - VOICE_SKIP_PLAYBACK=1
     privileged: true
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # Audio en Linux (opcional): descomenta en el host con ALSA; en WSL2/Docker suele hacer falta más configuración.
+    # devices:
+    #   - /dev/snd:/dev/snd
 
   # =============================
   # PMAS WEB MAIN (Angular)
