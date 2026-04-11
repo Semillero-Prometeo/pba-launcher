@@ -105,20 +105,24 @@ services:
     volumes:
       - ./pba-ms-robotics:/usr/src/app
       - ${GCLOUD_CONFIG_PATH:-~/.config/gcloud}:/root/.config/gcloud
+      - /run/user/1000/pulse:/run/user/1000/pulse
     command: uvicorn src.app:app --host 0.0.0.0 --port ${MS_ROBOTICS_PORT} --reload --reload-dir /usr/src/app --reload-exclude .venv
     environment:
       - NATS_SERVER=nats://nats-server:4222
       - PORT=${MS_ROBOTICS_PORT}
       - ENV=development
-      - PIPER_MODEL_PATH=${MS_ROBOTICS_PIPER_MODEL_PATH}
-      - ESPEAK_VOICE=${MS_ROBOTICS_ESPEAK_VOICE}
-      - VOICE_SKIP_PLAYBACK=${MS_ROBOTICS_VOICE_SKIP_PLAYBACK}
-      # Sin hardware de audio, usar VOICE_SKIP_PLAYBACK=1 para validar solo TTS (ver pba-ms-robotics/.env.template).
-      # - VOICE_SKIP_PLAYBACK=1
+      - PIPER_MODEL_PATH=${MS_ROBOTICS_PIPER_MODEL_PATH:-}
+      - ESPEAK_VOICE=${MS_ROBOTICS_ESPEAK_VOICE:-es}
+      - VOICE_SKIP_PLAYBACK=${MS_ROBOTICS_VOICE_SKIP_PLAYBACK:-0}
+      # PulseAudio del HOST (imprescindible para Bluetooth): ej. unix:/run/user/1000/pulse/native
+      - PULSE_SERVER=${MS_ROBOTICS_PULSE_SERVER:-}
     privileged: true
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    # Audio en Linux (opcional): descomenta en el host con ALSA; en WSL2/Docker suele hacer falta más configuración.
+    # Audio: descomenta en Linux con Pulse del usuario (ajusta UID). Sin esto, paplay falla con "Connection refused".
+    # volumes:
+    #   - /run/user/1000/pulse:/run/user/1000/pulse
+    # Bluetooth/ALSA en el host (opcional además de Pulse):
     # devices:
     #   - /dev/snd:/dev/snd
 
