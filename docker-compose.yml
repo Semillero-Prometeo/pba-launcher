@@ -141,6 +141,7 @@ services:
     command: npm run start -- --host 0.0.0.0 --port ${WEB_MAIN_PORT} --poll 2000
     environment:
       - WEB_MAIN_PORT=${WEB_MAIN_PORT}
+      - NODE_OPTIONS=--max-old-space-size=4096
 
 volumes:
   pba-ms-gateway-node_modules:
