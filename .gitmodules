@@ -22,3 +22,6 @@
 	path = pba-arduino-codes
 	url = https://github.com/Semillero-Prometeo/pba-arduino-codes.git
 	branch = dev
+[submodule "pmai-mai-core"]
+	path = pmai-mai-core
+	url = https://github.com/Semillero-Prometeo/pmai-mai-core.git

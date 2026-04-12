@@ -119,12 +119,6 @@ services:
     privileged: true
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    # Audio: descomenta en Linux con Pulse del usuario (ajusta UID). Sin esto, paplay falla con "Connection refused".
-    # volumes:
-    #   - /run/user/1000/pulse:/run/user/1000/pulse
-    # Bluetooth/ALSA en el host (opcional además de Pulse):
-    # devices:
-    #   - /dev/snd:/dev/snd
 
   # =============================
   # PMAS WEB MAIN (Angular)
@@ -142,6 +136,42 @@ services:
     environment:
       - WEB_MAIN_PORT=${WEB_MAIN_PORT}
       - NODE_OPTIONS=--max-old-space-size=4096
+
+  # =============================
+  # PMAI CORE
+  # =============================
+  pmai-core:
+    build:
+      context: ./pmai-mai-core
+      dockerfile: Dockerfile.dev
+    working_dir: /app
+    volumes:
+      - ./pmai-mai-core:/app
+      - ./data:/data:ro
+    environment:
+      NATS_SERVER: nats://nats-server:4222
+      PMAI_SETTINGS: ${PMAI_CORE_SETTINGS}
+      PYTHONPATH: ${PMAI_CORE_PYTHONPATH}
+      OMP_NUM_THREADS: ${PMAI_CORE_OMP_NUM_THREADS}
+      MKL_NUM_THREADS: ${PMAI_CORE_MKL_NUM_THREADS}
+      OPENBLAS_NUM_THREADS: ${PMAI_CORE_OPENBLAS_NUM_THREADS}
+    depends_on:
+      - nats-server
+    ports:
+      - "${PMAI_CORE_PORT}:${PMAI_CORE_PORT}"
+    privileged: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # V4L2 devices — only needed on native Linux (production).
+    # On WSL2 these may not work; use camera.sources in settings.toml instead.
+    # devices:
+    #   - /dev/video0:/dev/video0
+    #   - /dev/video1:/dev/video1
+    command:
+      - /bin/bash
+      - -lc
+      - >
+        watchfiles "python -m pmai_core /app/settings.toml" /app/src
 
 volumes:
   pba-ms-gateway-node_modules:
