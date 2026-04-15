@@ -25,3 +25,8 @@
 [submodule "pmai-mai-core"]
 	path = pmai-mai-core
 	url = https://github.com/Semillero-Prometeo/pmai-mai-core.git
+	branch = dev
+[submodule "pmas-web-motion-studio"]
+	path = pmas-web-motion-studio
+	url = https://github.com/Semillero-Prometeo/pmas-web-motion-studio.git
+	branch = dev
