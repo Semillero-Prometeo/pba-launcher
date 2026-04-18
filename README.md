@@ -13,3 +13,14 @@ git submodule update --init --recursive
 ```bash
 git submodule update --remote
 ```
+
+
+sudo ufw allow 3000/tcp
+sudo ufw allow 3000/udp
+
+sudo ufw allow 4200/tcp
+sudo ufw allow 4200/udp
+
+ip a
+
+wlp2s0
