@@ -116,6 +116,13 @@ services:
       - VOICE_SKIP_PLAYBACK=${MS_ROBOTICS_VOICE_SKIP_PLAYBACK:-0}
       # PulseAudio del HOST (imprescindible para Bluetooth): ej. unix:/run/user/1000/pulse/native
       - PULSE_SERVER=${MS_ROBOTICS_PULSE_SERVER:-}
+      # TTS OpenAI online (misma clave que management si no defines MS_ROBOTICS_OPENAI_API_KEY)
+      - VOICE_TTS_MODE=${MS_ROBOTICS_VOICE_TTS_MODE}
+      - OPENAI_API_KEY=${MS_ROBOTICS_OPENAI_API_KEY}
+      - OPENAI_TTS_MODEL=${MS_ROBOTICS_OPENAI_TTS_MODEL}
+      - OPENAI_TTS_VOICE=${MS_ROBOTICS_OPENAI_TTS_VOICE}
+      - OPENAI_TTS_SPEED=${MS_ROBOTICS_OPENAI_TTS_SPEED}
+      - OPENAI_TTS_TIMEOUT=${MS_ROBOTICS_OPENAI_TTS_TIMEOUT}
     privileged: true
     extra_hosts:
       - "host.docker.internal:host-gateway"
