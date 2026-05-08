@@ -30,12 +30,13 @@ sudo ufw allow 4200/tcp
 sudo ufw allow 4200/udp
 
 ip a
+ip a
 
 wlp2s0
-192.168.1.115
+10.211.14.115
 
 Buscar pmas-web-main
-Buscar src/enviroments/
+Buscar src/enviroments/ud
 Se debe cambiar la IP en gatewayUrl
 
 
