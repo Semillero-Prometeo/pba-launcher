@@ -38,6 +38,12 @@ LAN_IFACE=wlp2s0 ./scripts/lan-up.sh
 
 El script detecta la IPv4 de la LAN, abre reglas UFW TCP para los puertos del gateway (3000) y la web (4200) cuando es posible, ejecuta `docker compose up -d`, espera a que el puerto 4200 responda, imprime la URL LAN (`http://<LAN_IP>:4200`) y abre el navegador en el host.
 
+Tras actualizar el frontend (por ejemplo la dependencia `qrcode`), reconstruya el servicio web una vez para refrescar `node_modules` del contenedor:
+
+```bash
+docker compose up -d --build pmas-web-main
+```
+
 **Teléfonos y otros dispositivos:** use la URL impresa en consola o escanee **Código QR de red** después de iniciar sesión (en la primera visita al admin el modal aparece automáticamente; el menú de perfil puede reabrirlo).
 
 ### Credenciales de acceso
