@@ -149,12 +149,15 @@ services:
   # =============================
   pmai-core:
     build:
-      context: ./pmai-mai-core
-      dockerfile: Dockerfile.dev
+      context: .
+      dockerfile: pmai-mai-core/Dockerfile.dev
     working_dir: /app
     volumes:
       - ./pmai-mai-core:/app
       - ./data:/data:ro
+      - ./data/milvus:/data/milvus
+      - ./pmai-model-context:/opt/model-context
+      - ./pmai-model-vision-language:/opt/action-model
     environment:
       NATS_SERVER: nats://nats-server:4222
       PMAI_SETTINGS: ${PMAI_CORE_SETTINGS}
@@ -162,6 +165,7 @@ services:
       OMP_NUM_THREADS: ${PMAI_CORE_OMP_NUM_THREADS}
       MKL_NUM_THREADS: ${PMAI_CORE_MKL_NUM_THREADS}
       OPENBLAS_NUM_THREADS: ${PMAI_CORE_OPENBLAS_NUM_THREADS}
+      MILVUS_DB_PATH: /data/milvus/androide_milvus.db
     depends_on:
       - nats-server
     ports:
