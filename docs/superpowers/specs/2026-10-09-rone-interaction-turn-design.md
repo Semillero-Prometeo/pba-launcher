@@ -1,7 +1,7 @@
 # Turno de interacción de R-ONE — design
 
 Date: 2026-10-09  
-Status: pending user review of this file  
+Status: approved by user on 2026-10-09  
 Scope: one interaction turn inside `pmai-mai-core`, using `pmai-model-context` (BLIP) and `pmai-model-vision-language` (Milvus + acción) as libraries.
 
 ## Problem
