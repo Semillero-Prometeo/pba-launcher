@@ -30,3 +30,9 @@
 	path = pmas-web-motion-studio
 	url = https://github.com/Semillero-Prometeo/pmas-web-motion-studio.git
 	branch = dev
+[submodule "pmai-model-vision-language"]
+	path = pmai-model-vision-language
+	url = https://github.com/Semillero-Prometeo/pmai-model-vision-language.git
+[submodule "pmai-model-context"]
+	path = pmai-model-context
+	url = https://github.com/Semillero-Prometeo/pmai-model-context.git
