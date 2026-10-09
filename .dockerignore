@@ -1,0 +1,21 @@
+# pmai-core builds with context `.` (see docker-compose.yml).
+# Keep pmai-mai-core, pmai-model-context, and pmai-model-vision-language.
+
+.git
+**/.git
+
+.worktrees
+
+data
+/data
+
+.env
+**/.env
+
+node_modules
+**/node_modules
+
+.venv
+**/.venv
+venv
+**/venv
