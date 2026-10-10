@@ -33,7 +33,7 @@ PMAI_CORE_PYTHONPATH=/opt/model-context:/opt/action-model:/app/src
 
 Antes del primer arranque:
 
-- Modelo local en `pmai-model-vision-language/models/gguf/gemma-4-E2B-it-Q4_K_M.gguf`. Sin ese archivo, y sin clave de OpenAI, el turno responde con la frase de disculpa.
+- Si falta `pmai-model-vision-language/models/gguf/gemma-4-E2B-it-Q4_K_M.gguf`, mai-core lo descarga de Hugging Face al arrancar. Hace falta red esa primera vez.
 - Opcional: `OPENAI_API_KEY` en `pmai-model-vision-language/.env`. Con red y clave se usa `gpt-4o-mini`; si no, Gemma.
 - Opcional: descripciones de gestos en `/usr/src/app/data/action-descriptions.json` dentro de `pba-ms-robotics` (`ACTION_DESCRIPTIONS_PATH`). Si no existe, la descripción llega vacía y el modelo usa el nombre.
 - Milvus Lite crea `conocimiento` e `interacciones` al arrancar mai-core. El archivo queda en `pmai-model-vision-language/utils/milvus/androide_milvus.db`.
