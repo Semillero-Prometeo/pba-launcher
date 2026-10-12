@@ -36,3 +36,6 @@
 [submodule "pmai-model-context"]
 	path = pmai-model-context
 	url = https://github.com/Semillero-Prometeo/pmai-model-context.git
+[submodule "pmai-model-vision"]
+	path = pmai-model-vision
+	url = https://github.com/Semillero-Prometeo/pmai-model-vision.git
