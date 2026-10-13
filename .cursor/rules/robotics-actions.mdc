@@ -1,0 +1,19 @@
+---
+description: De dónde sale el catálogo de gestos y cómo se ejecuta
+globs: pba-ms-robotics/src/action/**/*.py
+alwaysApply: false
+---
+
+# Acciones del cuerpo
+
+`get_actions` lee los puertos `/dev/ttyACM*` y `/dev/ttyUSB*`, pide la lista al Arduino y le une la descripción.
+
+La descripción sale de `ACTION_DESCRIPTIONS_PATH`. Si el archivo no está, el JSON es inválido o esa fila no existe, `description` es `""`. No bloquees el listado por una descripción vacía.
+
+Sin puertos, la respuesta correcta es una lista vacía. No rellenes con gestos de ejemplo.
+
+`execute_action` recibe `action_id` y `arduino_id` y escribe ese número al serial de ese Arduino. No traduzcas el id a otro número.
+
+```python
+Command(id=4, name="Saludo", arduino_id=1, description="")
+```

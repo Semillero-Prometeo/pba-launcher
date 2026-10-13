@@ -1,0 +1,30 @@
+---
+description: Contrato del turno de pregunta, escena, voz y gesto
+globs: pmai-mai-core/**/*.py
+alwaysApply: false
+---
+
+# Turno de interacción
+
+El dueño es `src/pmai_core/pipeline/interaction_turn.py`. Una pregunta a la vez.
+
+Orden obligatorio:
+
+1. Elegir a la persona de mayor `confianza`. Empate: `id_global` menor.
+2. Sin persona, etiqueta `Persona no identificada` y sin BLIP.
+3. Con recuadro, JPEG calidad 85 y BLIP. Si falla, `contexto` vacío y se sigue.
+4. Catálogo con `getActions`. Si falla o viene vacío, se responde y no se ejecuta.
+5. `responder(obj, catalogo)` devuelve frase y como máximo 3 ids.
+6. `speak` y los `executeAction` válidos en paralelo. El orden de los gestos se conserva.
+
+Voz de menos de 14 caracteres: frase `No te escuche con claridad, puedes repetirlo por favor.` y no hay modelo.
+
+Turno ocupado: `Sigo respondiendo, un momento.` En chat no se pronuncia. En voz sí.
+
+`ask` devuelve la frase, `fuente` y los gestos enviados (`id`, `name`). El controlador NATS los publica en `{ reply, fuente, movimientos }`.
+
+```python
+# El modelo dijo [4, 99] y el catálogo solo tiene el 4
+ejecutar = [4]
+# 99 se omite. No se inventa un gesto de relleno.
+```

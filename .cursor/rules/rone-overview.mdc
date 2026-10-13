@@ -1,0 +1,21 @@
+---
+description: Mapa de R-ONE y límites que aplican en cualquier cambio
+alwaysApply: true
+---
+
+# R-ONE
+
+Este directorio es un lanzador de repositorios. Edita solo el repositorio dueño del cambio.
+
+- Percepción, micrófono y turno: `pmai-mai-core`
+- Descripción de la imagen: `pmai-model-context` (import `model_context`, nunca `utils`)
+- Respuesta, Milvus y Gemma: `pmai-model-vision-language` (import `utils`)
+- Voz y acciones del cuerpo: `pba-ms-robotics`
+- Chat HTTP: `pba-ms-management` reenvía a `MAI_CORE_MS.interactionService.ask`
+- Pantalla: `pmas-web-main`
+
+El chat de la interfaz y el micrófono usan el mismo turno. No vuelvas a conectar `chatService.chat` con OpenAI. `declarePoema` sí se queda en OpenAI.
+
+Un gesto solo es válido si `getActions` lo devolvió en esa llamada. Sin puerto serial, la lista vacía es el resultado correcto: se habla y no se ejecuta nada.
+
+Antes de cambiar el turno, lee `AGENTS.md`.

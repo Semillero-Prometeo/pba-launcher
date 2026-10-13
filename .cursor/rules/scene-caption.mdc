@@ -1,0 +1,17 @@
+---
+description: Cómo se describe el recorte de la persona
+globs: pmai-model-context/**/*.py
+alwaysApply: false
+---
+
+# Descripción de la escena
+
+El paquete se importa como `model_context`. No lo renombres a `utils`: ese nombre es del modelo de acción.
+
+La entrada es el JPEG en base64 del recorte. La salida es una frase corta. BLIP sigue siendo el descriptor (`Salesforce/blip-image-captioning-base`). No lo sustituyas por Gemma.
+
+`generate_context_from_base64` limpia la frase antes de devolverla. Conserva ese filtro. Si el recorte es inválido, lanza error: quien llama es el turno, y el turno sigue con contexto vacío.
+
+```python
+from model_context.context import generate_context_from_base64
+```

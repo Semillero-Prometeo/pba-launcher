@@ -1,0 +1,15 @@
+---
+description: Qué debe mostrar y conservar el chat del androide
+globs: pmas-web-main/src/app/pages/robotics-chat/**/*,pba-ms-management/src/chat/**/*.ts,pba-ms-management/src/ms-mai-core-integration/**/*.ts
+alwaysApply: false
+---
+
+# Chat
+
+`POST /chat/question` sigue igual. Management pide `MAI_CORE_MS.interactionService.ask` y devuelve el objeto tal cual, con `reply`, `fuente` y `movimientos`. No llames a `speak` ni a OpenAI en `chat()`.
+
+La burbuja del robot muestra la frase, la fuente y los gestos. Cada gesto se ve con su nombre y su id. Si `movimientos` llega vacío, se muestra «Sin movimiento». No ocultes ese caso.
+
+```ts
+{ reply: "Hola", fuente: "Gemma (local)", movimientos: [{ id: 4, name: "Saludo" }] }
+```

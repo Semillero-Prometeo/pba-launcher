@@ -1,0 +1,23 @@
+---
+description: Respuesta, memoria y catálogo de gestos del modelo de acción
+globs: pmai-model-vision-language/**/*.py
+alwaysApply: false
+---
+
+# Modelo de acción
+
+`responder(obj, secuencias)` en `utils/main.py` es la única entrada del turno.
+
+Orden: limpiar la pregunta, buscar en `conocimiento`, y solo si no hay acierto buscar en `interacciones` con coincidencia estricta. Si Milvus falla, se genera y no se indexa.
+
+El catálogo entra al prompt como tabla Markdown (`id`, `nombre`, `arduino_id`, `descripcion`). No vuelvas a escribir ids fijos del 1 al 34. Una descripción vacía se deja vacía.
+
+La salida conserva `fuente` (`cache` o `llm`) y, en la ruta del modelo, `backend` (`openai` o `gguf`). Los ids devueltos existen en el catálogo de esa llamada y son como máximo 3.
+
+Gemma se carga una vez. Si falta el archivo `models/gguf/gemma-4-E2B-it-Q4_K_M.gguf`, se descarga de `unsloth/gemma-4-E2B-it-GGUF`. No lo copies al repositorio.
+
+```python
+# Mal: enseñarle al modelo que el saludo es siempre el 4
+"movimientos": [4, 6]
+# Bien: la tabla de esta llamada es la única lista
+```
