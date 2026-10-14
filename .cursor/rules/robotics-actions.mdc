@@ -6,9 +6,9 @@ alwaysApply: false
 
 # Acciones del cuerpo
 
-`get_actions` arma el catálogo con las secuencias canónicas que ya tienen `id`. Cada fila es `Command(id, name, arduino_id, description)` donde `arduino_id` es el del primer bloque. Sin secuencias con `id`, la lista es vacía. No rellenes con gestos de ejemplo ni con el firmware Arduino.
+`get_actions` lista solo pares completos (`category` + `blocks` + `blocks_neutro`) que ya tienen `id`. Cada fila es `Command(id, name, arduino_id, description)` donde `arduino_id` es el del primer bloque. Sin pares con `id`, la lista es vacía. No rellenes con gestos de ejemplo ni con el firmware Arduino.
 
-`execute_action` recibe `action_id` y `arduino_id`. Si hay una secuencia con ese `id`, reproduce sus bloques. Si no, escribe ese número al serial de ese Arduino.
+`execute_action` recibe `action_id` y `arduino_id`. Par completo: encola normal, espera 1 s, neutro, espera 1 s y regresa. Par incompleto: omite (`omitido`). Sin secuencia: escribe el número al serial. Play de panel/estudio con `busy` se rechaza; el turno nunca se rechaza por ocupado. `GET runtime` es el estado del reproductor.
 
 La descripción vive en el archivo de la secuencia. No escribas `ACTION_DESCRIPTIONS_PATH` para estas frases.
 

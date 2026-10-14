@@ -29,9 +29,9 @@ Una pregunta a la vez. Entra por el micrófono o por `POST /chat/question`.
 
 1. `interaction_turn.py` elige a la persona de mayor confianza. Empate: `id_global` menor. Sin persona: etiqueta `Persona no identificada` y sin imagen.
 2. Si hay recuadro, recorte JPEG calidad 85 y BLIP. Si BLIP falla, el contexto queda vacío y se sigue.
-3. `ROBOTICS_MS.actionService.getActions` lista secuencias ingestadas con `id`. Almacén vacío: lista vacía, se habla y no se mueve. Eso no es un fallo del turno. Sin Arduino no es la razón de un catálogo vacío.
+3. `ROBOTICS_MS.actionService.getActions` lista pares completos (`category` + `blocks` + `blocks_neutro`) que ya tienen `id`. Almacén vacío o solo JSON legado: lista vacía, se habla y no se mueve. Eso no es un fallo del turno. Sin Arduino no es la razón de un catálogo vacío.
 4. `responder()` en `pmai-model-vision-language/utils/main.py`. Primero Milvus (`conocimiento`, luego `interacciones` con coincidencia estricta). Si no hay acierto, OpenAI si hay clave y red; si no, Gemma 4 E2B. Ids de gesto solo si están en el catálogo de esa llamada. Máximo 3.
-5. `voiceService.speak` y, en orden, `actionService.executeAction` por cada id válido.
+5. `voiceService.speak` y, en orden, `actionService.executeAction` por cada id válido. mai-core no espera ni inserta el neutro: robótica encola **normal → 1 s → neutro → 1 s** por cada id y la llamada regresa al encolar.
 6. La pantalla recibe `{ reply, fuente, movimientos }`. `fuente` es `caché`, `OpenAI`, `Gemma (local)`, `ocupado`, `voz corta` o `disculpa`.
 
 `chatService.declarePoema` no usa este turno. Sigue en OpenAI y sí llama a hablar.
