@@ -16,6 +16,6 @@ Este directorio es un lanzador de repositorios. Edita solo el repositorio dueño
 
 El chat de la interfaz y el micrófono usan el mismo turno. No vuelvas a conectar `chatService.chat` con OpenAI. `declarePoema` sí se queda en OpenAI.
 
-Un gesto solo es válido si `getActions` lo devolvió en esa llamada. Sin puerto serial, la lista vacía es el resultado correcto: se habla y no se ejecuta nada.
+Un gesto solo es válido si `getActions` lo devolvió en esa llamada. El catálogo son secuencias ingestadas con `id`. Lista vacía: se habla y no se ejecuta nada.
 
 Antes de cambiar el turno, lee `AGENTS.md`.

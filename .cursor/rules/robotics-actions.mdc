@@ -6,14 +6,12 @@ alwaysApply: false
 
 # Acciones del cuerpo
 
-`get_actions` lee los puertos `/dev/ttyACM*` y `/dev/ttyUSB*`, pide la lista al Arduino y le une la descripción.
+`get_actions` arma el catálogo con las secuencias canónicas que ya tienen `id`. Cada fila es `Command(id, name, arduino_id, description)` donde `arduino_id` es el del primer bloque. Sin secuencias con `id`, la lista es vacía. No rellenes con gestos de ejemplo ni con el firmware Arduino.
 
-La descripción sale de `ACTION_DESCRIPTIONS_PATH`. Si el archivo no está, el JSON es inválido o esa fila no existe, `description` es `""`. No bloquees el listado por una descripción vacía.
+`execute_action` recibe `action_id` y `arduino_id`. Si hay una secuencia con ese `id`, reproduce sus bloques. Si no, escribe ese número al serial de ese Arduino.
 
-Sin puertos, la respuesta correcta es una lista vacía. No rellenes con gestos de ejemplo.
-
-`execute_action` recibe `action_id` y `arduino_id` y escribe ese número al serial de ese Arduino. No traduzcas el id a otro número.
+La descripción vive en el archivo de la secuencia. No escribas `ACTION_DESCRIPTIONS_PATH` para estas frases.
 
 ```python
-Command(id=4, name="Saludo", arduino_id=1, description="")
+Command(id=4, name="Saludo", arduino_id=1, description="Saludo con el brazo derecho")
 ```

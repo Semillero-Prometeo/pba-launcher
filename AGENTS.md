@@ -19,8 +19,9 @@ Un lanzador. Cada carpeta de primer nivel, salvo `docs/`, es un repositorio prop
 | `pmai-model-context` | BLIP. Paquete importable: `model_context` |
 | `pmai-model-vision-language` | Milvus, prompt, Gemma u OpenAI. Paquetes: `utils`, `prompt`, `models` |
 | `pmai-model-vision` | Entrenamiento del detector. 802 imágenes, 25 clases, fase 2 |
+| `pmas-web-motion-studio` | Editor web de secuencias (origen + descripción); Compose lo levanta; Angular lo incrusta |
 
-`pba-arduino-codes` y `pmas-web-motion-studio` no forman parte del turno.
+`pba-arduino-codes` no forma parte del turno.
 
 ## El turno
 
@@ -28,7 +29,7 @@ Una pregunta a la vez. Entra por el micrófono o por `POST /chat/question`.
 
 1. `interaction_turn.py` elige a la persona de mayor confianza. Empate: `id_global` menor. Sin persona: etiqueta `Persona no identificada` y sin imagen.
 2. Si hay recuadro, recorte JPEG calidad 85 y BLIP. Si BLIP falla, el contexto queda vacío y se sigue.
-3. `ROBOTICS_MS.actionService.getActions`. Sin `/dev/ttyACM*` ni `/dev/ttyUSB*`, la lista es vacía. Eso no es un fallo del turno.
+3. `ROBOTICS_MS.actionService.getActions` lista secuencias ingestadas con `id`. Almacén vacío: lista vacía, se habla y no se mueve. Eso no es un fallo del turno. Sin Arduino no es la razón de un catálogo vacío.
 4. `responder()` en `pmai-model-vision-language/utils/main.py`. Primero Milvus (`conocimiento`, luego `interacciones` con coincidencia estricta). Si no hay acierto, OpenAI si hay clave y red; si no, Gemma 4 E2B. Ids de gesto solo si están en el catálogo de esa llamada. Máximo 3.
 5. `voiceService.speak` y, en orden, `actionService.executeAction` por cada id válido.
 6. La pantalla recibe `{ reply, fuente, movimientos }`. `fuente` es `caché`, `OpenAI`, `Gemma (local)`, `ocupado`, `voz corta` o `disculpa`.
@@ -42,7 +43,7 @@ Una pregunta a la vez. Entra por el micrófono o por `POST /chat/question`.
 - El GGUF vive en `pmai-model-vision-language/models/gguf/gemma-4-E2B-it-Q4_K_M.gguf`. Si falta, se descarga de `unsloth/gemma-4-E2B-it-GGUF`.
 - La clave de OpenAI del modelo de acción está en el `.env` de `pmai-model-vision-language`.
 - Milvus Lite escribe `pmai-model-vision-language/utils/milvus/androide_milvus.db`.
-- Descripciones de gestos, si existen: `ACTION_DESCRIPTIONS_PATH` en robótica, por defecto `/usr/src/app/data/action-descriptions.json`.
+- Descripciones de secuencias: las escribe el estudio al crear. Viven en el JSON canónico de robótica. `ACTION_DESCRIPTIONS_PATH` no se usa para esas frases.
 
 ## Documentación larga
 

@@ -145,6 +145,21 @@ services:
       - NODE_OPTIONS=--max-old-space-size=4096
 
   # =============================
+  # PMAS WEB MOTION STUDIO
+  # =============================
+  pmas-web-motion-studio:
+    build:
+      context: ./pmas-web-motion-studio
+      dockerfile: Dockerfile.dev
+    ports:
+      - "${MOTION_STUDIO_PORT}:${MOTION_STUDIO_PORT}"
+    volumes:
+      - ./pmas-web-motion-studio:/usr/src/app
+    command: uvicorn src.app:app --host 0.0.0.0 --port ${MOTION_STUDIO_PORT} --reload --reload-dir /usr/src/app
+    environment:
+      - PORT=${MOTION_STUDIO_PORT}
+
+  # =============================
   # PMAI CORE
   # =============================
   pmai-core:

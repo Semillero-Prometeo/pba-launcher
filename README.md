@@ -35,7 +35,8 @@ Antes del primer arranque:
 
 - Si falta `pmai-model-vision-language/models/gguf/gemma-4-E2B-it-Q4_K_M.gguf`, mai-core lo descarga de Hugging Face al arrancar. Hace falta red esa primera vez.
 - Opcional: `OPENAI_API_KEY` en `pmai-model-vision-language/.env`. Con red y clave se usa `gpt-4o-mini`; si no, Gemma.
-- Opcional: descripciones de gestos en `/usr/src/app/data/action-descriptions.json` dentro de `pba-ms-robotics` (`ACTION_DESCRIPTIONS_PATH`). Si no existe, la descripción llega vacía y el modelo usa el nombre.
+- El catálogo del turno son las secuencias ingestadas (`id`, nombre, descripción) creadas en el estudio de movimiento. `ACTION_DESCRIPTIONS_PATH` sigue existiendo, pero el turno no usa esas frases.
+- El estudio web corre en el puerto `MOTION_STUDIO_PORT` (4210). `/sequences` lo carga en un iframe. `sudo ufw allow 4210/tcp` si hace falta en la LAN.
 - Milvus Lite crea `conocimiento` e `interacciones` al arrancar mai-core. El archivo queda en `pmai-model-vision-language/utils/milvus/androide_milvus.db`.
 - El primer inicio descarga BLIP y el modelo de embeddings, y carga Gemma. Tarda.
 
@@ -52,6 +53,9 @@ sudo ufw allow 3000/udp
 
 sudo ufw allow 4200/tcp
 sudo ufw allow 4200/udp
+
+sudo ufw allow 4210/tcp
+sudo ufw allow 4210/udp
 
 ip a
 ip a
