@@ -79,6 +79,7 @@ Prohibido `text-[8px]`, `text-[9px]`, `text-[10px]` en UI. Mayúsculas sostenida
 - Cabecera de página: icono en pozo + título + una línea de guía. El pozo puede ser navy o esmeralda; no reabrir la malla del panel.
 - KPI Libre: contenedor esmeralda, no riel navy.
 - Chat: dos pestañas a ancho completo, alto mínimo 44px, texto 14px.
+- Motion Studio (iframe): cabecera navy; barra Play / Stop / Agregar / Gesto|Neutro / Generar neutro / Guardar / Actualizar; Guardar abre diálogo (nombre, descripción ≥ 10, categoría, Arduino); escenario en papel frío; barras de gesto cian y de neutro esmeralda. No reabrir la gramática de la regla.
 
 ## Named Rules
 
@@ -86,7 +87,7 @@ Prohibido `text-[8px]`, `text-[9px]`, `text-[10px]` en UI. Mayúsculas sostenida
 
 **The Green Reserve Rule.** `#059669` solo Libre, Neutro y ok.
 
-**The Accent Chip Rule.** El cian ocupa Normal, Enviar, pestaña activa y el foco. Prohibido un título largo en `#38bdf8`.
+**The Accent Chip Rule.** El cian ocupa Normal, Enviar, pestaña activa, Play, Guardar, pista Gesto activa y el foco. Prohibido un título largo en `#38bdf8`.
 
 **The No Theater Rule.** Cero hex de consola, cero System Override, cero Uptime/Signal. Mono solo en la hora del registro.
 
