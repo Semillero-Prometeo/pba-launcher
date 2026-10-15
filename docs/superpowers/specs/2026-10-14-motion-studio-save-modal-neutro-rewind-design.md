@@ -2,9 +2,9 @@
 
 Date: 2026-10-14  
 Status: approved by user on 2026-10-14  
-Scope: reordenar la barra del estudio, pedir nombre / descripción / categoría / Arduino en un diálogo al guardar, exigir descripción de al menos 10 caracteres, y generar el neutro como rebobinado que deshace el camino del gesto. Dueños: `pmas-web-motion-studio` (UI + `generate_neutro`) y `pba-ms-robotics` (ingest + `is_complete_pair`).
+Scope: reordenar la barra del estudio, pedir nombre / descripción / categoría / Arduino en un diálogo al guardar, exigir descripción de al menos 10 caracteres, generar el neutro como rebobinado que deshace el camino del gesto, y pintar el iframe con la misma identidad de `PRODUCT.md` / `DESIGN.md` (marco navy, papel frío, cian de acción, esmeralda en Neutro). Dueños: `pmas-web-motion-studio` (UI + `generate_neutro` + `editor.css`), `pba-ms-robotics` (ingest + `is_complete_pair`), y los dos Markdown de la raíz del lanzador.
 
-Relación: el spec `2026-10-14-sequence-neutro-runtime-design.md` sigue vigente para JSON de dos pistas, categorías, cola normal → 1 s → neutro → 1 s, `getActions` y el panel. Este corte **cambia** cómo se rellenan `blocks_neutro` y **cuándo** se piden los metadatos. El spec `2026-10-14-navy-chrome-chat-tabs-design.md` no se reabre.
+Relación: el spec `2026-10-14-sequence-neutro-runtime-design.md` sigue vigente para JSON de dos pistas, categorías, cola normal → 1 s → neutro → 1 s, `getActions` y el panel. Este corte **cambia** cómo se rellenan `blocks_neutro`, **cuándo** se piden los metadatos y **cómo se ve** el iframe. El spec `2026-10-14-navy-chrome-chat-tabs-design.md` no se reabre: sus tokens se **reutilizan** aquí, no se redefinen.
 
 Cortes pendientes (specs propias, no este archivo):
 
@@ -15,6 +15,8 @@ Cortes pendientes (specs propias, no este archivo):
 
 La cabecera del estudio mezcla identidad, nombre, descripción, categoría y Arduino en una sola fila rígida. Play, Stop, Agregar, pistas, Generar neutro, Guardar y Actualizar no siguen un orden de tarea. Guardar escribe en cuanto hay nombre y categoría, con descripción opcional (0–280). El turno usa esa frase en el prompt: una descripción vacía o de dos letras no sirve.
 
+El iframe sigue en noche industrial (`--bg: #000f1d`, texto claro, tipo de 10 px en modo y campos). Encajado en el panel navy/papel se lee como otra aplicación. PRODUCT exige una identidad; DESIGN no tiene un segundo sistema dentro del estudio.
+
 **Generar neutro** hoy no copia el gesto. Por cada `(pca, servo)` toma la `pos` de menor `inicio`, la pone en el segundo 0 y le asigna duración 2. El operador pidió lo contrario: los mismos pasos, rebobinados, misma duración, deshaciendo el camino hasta el reposo.
 
 ## Goal
@@ -24,6 +26,7 @@ La cabecera del estudio mezcla identidad, nombre, descripción, categoría y Ard
 3. Guardar abre un diálogo. Campos: nombre (1–80), descripción (10–280, una línea), categoría (una de las seis), Arduino (entero ≥ 0, default 0). Si la secuencia ya estaba abierta, los cuatro vienen llenos.
 4. Generar neutro: rebobinado que deshace el camino (algoritmo abajo). Confirmación si ya hay pista. Después se edita a mano.
 5. Ingest y guardado local rechazan descripción de menos de 10 caracteres. Un par sin esa frase no entra a `getActions`.
+6. El iframe usa los mismos hex, roles y escala de tipo que `DESIGN.md`. No hay `DESIGN.md` ni paleta propia dentro de `pmas-web-motion-studio`. `PRODUCT.md` deja de listar el estudio como corte visual pendiente y apunta el CSS del iframe como evidencia.
 
 ## Non-goals
 
@@ -31,13 +34,14 @@ La cabecera del estudio mezcla identidad, nombre, descripción, categoría y Ard
 - Cambiar el turno, `executeAction`, `declarePoema` o `{ reply, fuente, movimientos }`.
 - Cambiar la forma del JSON (sigue `blocks` + `blocks_neutro` + `category`).
 - Reescribir `interfaz_record9_5_1.py`.
-- Rediseñar el editor de timeline (reglas, arrastre, inspector de bloque, lista lateral).
+- Cambiar la gramática de la línea de tiempo (reglas, arrastre, playhead, inspector de bloque, lista lateral). Se pinta; no se convierte en tabla ni en formulario.
+- Copiar componentes Angular al iframe. El estudio sigue en HTML/CSS/JS; solo comparte tokens.
 - Neutral de emergencia al Stop.
 - Borradores vs publicar. No hay tercer estado de archivo.
 
 ## Approach
 
-Opción A aprobada: todo el diálogo y la barra viven en el iframe (`index.html` + `editor.js` + `editor.css`). La función pura `generate_neutro` en Python y `generateNeutroFrom` en JS implementan el mismo rebobinado. Robótica valida descripción ≥ 10 en `ingest_save`. El modal no se sube a Angular.
+Opción A aprobada: diálogo, barra e identidad viven en el iframe (`index.html` + `editor.js` + `editor.css`). La función pura `generate_neutro` en Python y `generateNeutroFrom` en JS implementan el mismo rebobinado. Robótica valida descripción ≥ 10 en `ingest_save`. El modal no se sube a Angular. PRODUCT.md y DESIGN.md se actualizan en la raíz; no se duplican en el repo del estudio.
 
 ## Barra y cromo
 
@@ -55,7 +59,28 @@ Orden fijo:
 | 6 | Guardar | Abre el diálogo; no escribe hasta confirmar |
 | 7 | Actualizar | Recarga la lista; no abre el diálogo |
 
-Nombre, descripción, categoría y Arduino salen del `<header class="chrome">`. El iframe alinea contraste al papel frío (tinta navy, bordes `outline`, cuerpo ≥ 14 px / etiqueta ≥ 12 px) sin cambiar la gramática de la línea de tiempo.
+Nombre, descripción, categoría y Arduino salen del `<header class="chrome">`.
+
+## Identidad (PRODUCT / DESIGN)
+
+Regla **One Skin**: el iframe no es un mundo aparte. Los `:root` de `editor.css` mapean 1:1 a DESIGN:
+
+| Token actual | Pasa a | Rol |
+|---|---|---|
+| `--bg: #000f1d` | `#eef2f6` | Campo |
+| `--surface / --panel` | `#f7fafc` | Tarjeta (cromo interno, lista, inspector, diálogo) |
+| `--line` | `#c5d4e0` | Borde |
+| `--text: #e8eef4` | `#0B2540` | Tinta |
+| `--muted: #b8c4ce` | `#3d5a73` | Tinta quieta |
+| `--cyan` | `#38bdf8` | Play, Guardar, pista Gesto activa, foco |
+| `--emerald` | `#059669` (no `#10b981`) | Neutro (pista activa, Generar neutro, ok) |
+| `--rose` | `#dc2626` | Stop y eliminar bloque |
+
+Cabecera del iframe: fondo `#0B2540`, tinta `#eef2f6` (Navy Frame). Cuerpo y escenario: papel frío. Diálogo: tarjeta `#f7fafc` + borde + radio xl, sin glow. Play y Guardar son acción cian. Stop es rojo. El lado Neutro del conmutador, activo, es esmeralda; el lado Gesto, activo, es cian. Bloques de la pista neutra se leen en esmeralda; los del gesto en cian. Prohibido `text-[8px]`–`text-[10px]`, tracking extremo y mayúsculas sostenidas salvo el chip de modo (Suelto / Acoplado).
+
+Cargar Inter y Space Grotesk en `index.html` (las mismas caras que el operador). Cada botón de la barra lleva icono Material Symbols a la izquierda de la palabra. Etiquetas: Play, Stop, Agregar, Gesto, Neutro, Generar neutro, Guardar, Actualizar — las que el operador ya usa. No hay «System Override» ni hex de consola.
+
+`PRODUCT.md`: principio «Cortes siguientes» deja de citar el estudio como deuda visual; Evidence incluye `pmas-web-motion-studio/src/static/editor.css`. `DESIGN.md`: un bullet de Layout para el iframe (barra en orden del Goal 2, diálogo de guardar, escenario en papel frío). No se crea un DESIGN.md dentro del repo del estudio.
 
 ## Diálogo de guardar
 
@@ -103,6 +128,7 @@ Un servo que aparece una vez vuelve a 0 con la misma duración. Huecos del gesto
 
 - `tests/test_neutro.py`: dos pasos del mismo servo; dos servos; empate de `inicio`; hueco en el timeline; `replace=False` sigue fallando si ya hay pista.
 - `tests/test_app.py`: cromo sin inputs de nombre/descripción/categoría; esos ids viven en el `<dialog>`; barra en el orden de Goal 2; descripción del diálogo `minlength="10"`.
+- Spec-as-file-read sobre `editor.css`: `--bg` es `#eef2f6`, cabecera navy `#0B2540`, esmeralda `#059669`, no queda `#000f1d` ni `#10b981`. Tipo de cromo, barra y diálogo ≥ 12 px.
 - `tests/test_local_sequences.py`: rechazo de descripción de 9 caracteres; aceptación de 10.
 - `pba-ms-robotics/tests/test_sequence_ingest.py`: ingest con 9 caracteres falla; `is_complete_pair` falso si la frase es corta.
 
@@ -116,4 +142,4 @@ No se añade prueba de navegador del iframe en este corte.
 
 ## Lo que no se toca
 
-`pmai-mai-core`, `pmas-web-main` (salvo que el iframe se vea más claro al recargar), chat, visión, auth, gateway DTO de secuencia más allá de aceptar la misma forma.
+`pmai-mai-core`, `pmas-web-main` (el iframe se verá distinto al recargar; no se edita Angular salvo que un wrapper del estudio rompa el corte), chat, visión, auth, gateway DTO de secuencia más allá de aceptar la misma forma. No se reabre la paleta de Angular.
