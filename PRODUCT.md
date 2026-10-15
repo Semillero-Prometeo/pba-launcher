@@ -16,7 +16,7 @@ Mesa de control del androide R-ONE. El éxito es ver el estado real del robot, l
 
 ## Positioning
 
-Herramienta operativa de un semillero de investigación, no un admin SaaS genérico ni una consola militar. Español de operador. El `example/` de Davivienda es gramática de layout, no la marca.
+Herramienta operativa de un semillero de investigación, no un admin SaaS genérico ni una consola militar. Español de operador. Marco navy del logo; el cian marca la acción; el verde queda para Libre, Neutro y ok.
 
 ## Operating Context
 
@@ -29,19 +29,19 @@ Herramienta operativa de un semillero de investigación, no un admin SaaS genér
 
 - Un id de gesto válido es un par completo (`blocks` + `blocks_neutro` + categoría) con `id`.
 - Mientras el hardware está ocupado, la UI no inicia otro movimiento; Detener sí.
-- No copiar paleta ni marca Davivienda. Acento Prometeo: cian `#38bdf8` y esmeralda `#10b981`.
+- Acento Prometeo: cian `#38bdf8` para acción y pestaña activa; esmeralda `#059669` para Libre, Neutro y ok; navy `#0B2540` para el cascarón.
 
 ## Brand Commitments
 
 - Nombre: Prometeo / R-ONE / Universidad Libre.
-- Voz UI: español de operador (Ejecutar, Detener, En el robot, Registro).
+- Voz UI: español de operador (Gesto, Neutro, Detener, En el robot, Registro).
 - No hex de consola, no «System Override», no telemetría inventada.
+- No lienzo blanco puro: campo `#eef2f6`, tarjeta `#f7fafc`. El gris pizarra no sustituye al navy ni al verde.
 
 ## Evidence on Hand
 
-- Spec: `docs/superpowers/specs/2026-10-14-visual-identity-dashboard-design.md`
-- Tokens destino: `pmas-web-main/src/styles.css`
-- Gramática (no marca): `example/DESIGN.md`
+- Spec: `docs/superpowers/specs/2026-10-14-navy-chrome-chat-tabs-design.md`
+- Tokens: `pmas-web-main/src/styles.css`
 
 ## Product Principles
 
@@ -50,7 +50,9 @@ Herramienta operativa de un semillero de investigación, no un admin SaaS genér
 3. **Una identidad** — PRODUCT.md y DESIGN.md viven en la raíz del lanzador.
 4. **El turno no se maquilla** — chat y micrófono siguen el mismo contrato; este corte no lo toca.
 5. **Cortes siguientes** — estudio, auth y visión son otros ciclos.
+6. **Marco navy** — cabecera y menú son `#0B2540`; el verde no ocupa el riel.
+7. **Reserva verde** — Libre, Neutro y ok se leen en esmeralda.
 
 ## Accessibility & Inclusion
 
-Labels con texto visible, foco en controles, contraste de texto oscuro sobre fondo claro. El cian no se usa como único medio para el estado ocupado/libre (va acompañado de la palabra).
+Texto de cuerpo ≥ 14px, etiquetas ≥ 12px. Contraste AA (4,5:1 cuerpo, 3:1 controles). El cian y el verde nunca son el único medio de un estado: van con palabra e icono. Foco visible en teclado. Pestañas inactivas se leen en navy sobre tarjeta.
