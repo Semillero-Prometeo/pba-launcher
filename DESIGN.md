@@ -80,6 +80,8 @@ Prohibido `text-[8px]`, `text-[9px]`, `text-[10px]` en UI. Mayúsculas sostenida
 - KPI Libre: contenedor esmeralda, no riel navy.
 - Chat: dos pestañas a ancho completo, alto mínimo 44px, texto 14px.
 - Motion Studio (iframe): cabecera navy; barra Play / Stop / Agregar / Gesto|Neutro / Generar neutro / Guardar / Actualizar; Guardar abre diálogo (nombre, descripción ≥ 10, categoría, Arduino); escenario en papel frío; barras de gesto cian y de neutro esmeralda. No reabrir la gramática de la regla.
+- Login: aviso de sesión vencida sobre el formulario (icono `schedule`, 14 px, borde error). No toast.
+- Visión: cabecera con pozo navy; objetos observados en tarjetas grandes (recorte ≥ 128 px) a ancho completo; cámaras debajo en cuadrícula a ~480 px; sin Preview.
 
 ## Named Rules
 

@@ -42,6 +42,7 @@ Herramienta operativa de un semillero de investigación, no un admin SaaS genér
 
 - Spec: `docs/superpowers/specs/2026-10-14-navy-chrome-chat-tabs-design.md`
 - Spec: `docs/superpowers/specs/2026-10-14-motion-studio-save-modal-neutro-rewind-design.md`
+- Spec: `docs/superpowers/specs/2026-10-14-auth-session-admin-gate-vision-layout-design.md`
 - Tokens: `pmas-web-main/src/styles.css`
 - Studio: `pmas-web-motion-studio/src/static/editor.css`
 
@@ -51,7 +52,7 @@ Herramienta operativa de un semillero de investigación, no un admin SaaS genér
 2. **Datos reales** — KPI de estado, origen, conteo de secuencias y último evento; nunca CPU/dBm/uptime falsos.
 3. **Una identidad** — PRODUCT.md y DESIGN.md viven en la raíz del lanzador.
 4. **El turno no se maquilla** — chat y micrófono siguen el mismo contrato; este corte no lo toca.
-5. **Cortes siguientes** — auth y visión son otros ciclos. El estudio ya comparte esta identidad.
+5. **Sesión y visión** — si el token no vale, el login dice «Tu sesión venció. Entra de nuevo.» Usuarios y Roles son de ADMIN. En visión los objetos van arriba y las cámaras debajo, sin Preview.
 6. **Marco navy** — cabecera y menú son `#0B2540`; el verde no ocupa el riel.
 7. **Reserva verde** — Libre, Neutro y ok se leen en esmeralda.
 
