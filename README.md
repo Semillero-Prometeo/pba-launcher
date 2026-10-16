@@ -34,7 +34,7 @@ PMAI_CORE_PYTHONPATH=/opt/model-context:/opt/action-model:/app/src
 Antes del primer arranque:
 
 - Si falta `pmai-model-vision-language/models/gguf/gemma-4-E2B-it-Q4_K_M.gguf`, mai-core lo descarga de Hugging Face al arrancar. Hace falta red esa primera vez.
-- Opcional: `OPENAI_API_KEY` en `pmai-model-vision-language/.env`. Con red y clave se usa `gpt-4o-mini`; si no, Gemma.
+- Clave OpenAI del turno: `PMAI_OPENAI_API_KEY` en el `.env` del lanzador (si va vacía, se reusa `MS_MANAGEMENT_OPENAI_API_KEY`). Compose la inyecta en `pmai-core` como `OPENAI_API_KEY`. Si sigue vacía, `pmai-model-vision-language/.env` es el respaldo. Con clave se usa `gpt-4o-mini`; si no hay clave o la API falla, Gemma.
 - El catálogo del turno son las secuencias ingestadas (`id`, nombre, descripción) creadas en el estudio de movimiento. `ACTION_DESCRIPTIONS_PATH` sigue existiendo, pero el turno no usa esas frases.
 - El estudio web corre en el puerto `MOTION_STUDIO_PORT` (4210). `/sequences` lo carga en un iframe. `./scripts/lan-up.sh` abre ese puerto en UFW junto con 3000 y 4200.
 - Milvus Lite crea `conocimiento` e `interacciones` al arrancar mai-core. El archivo queda en `pmai-model-vision-language/utils/milvus/androide_milvus.db`.

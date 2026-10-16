@@ -41,7 +41,7 @@ Una pregunta a la vez. Entra por el micrófono o por `POST /chat/question`.
 - `PMAI_CORE_PYTHONPATH=/opt/model-context:/opt/action-model:/app/src`
 - La imagen de `pmai-core` se construye con el contexto en la raíz de este lanzador.
 - El GGUF vive en `pmai-model-vision-language/models/gguf/gemma-4-E2B-it-Q4_K_M.gguf`. Si falta, se descarga de `unsloth/gemma-4-E2B-it-GGUF`.
-- La clave de OpenAI del modelo de acción está en el `.env` de `pmai-model-vision-language`.
+- La clave OpenAI del modelo de acción llega a `pmai-core` por Compose (`PMAI_OPENAI_API_KEY`, o `MS_MANAGEMENT_OPENAI_API_KEY` si aquella va vacía). `pmai-model-vision-language/.env` es respaldo y no pisa la variable del contenedor. `PMAI_CORE_PYTHONPATH` no se recorta a `/app/src`.
 - Milvus Lite escribe `pmai-model-vision-language/utils/milvus/androide_milvus.db`.
 - Descripciones de secuencias: las escribe el estudio al crear. Viven en el JSON canónico de robótica. `ACTION_DESCRIPTIONS_PATH` no se usa para esas frases.
 
