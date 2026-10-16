@@ -69,3 +69,4 @@ data/
 .worktrees/
 
 *.hnsw.idx
+*.arrow
