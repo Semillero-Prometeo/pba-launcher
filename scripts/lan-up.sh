@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 WEB_PORT="${WEB_MAIN_PORT:-4200}"
 GATEWAY_PORT="${MS_GATEWAY_PORT:-3000}"
+STUDIO_PORT="${MOTION_STUDIO_PORT:-4210}"
 
 if [[ -f .env ]]; then
   # shellcheck disable=SC1091
@@ -14,13 +15,14 @@ if [[ -f .env ]]; then
   while IFS= read -r line || [[ -n "$line" ]]; do
     [[ "$line" =~ ^[[:space:]]*# ]] && continue
     [[ -z "${line//[[:space:]]/}" ]] && continue
-    if [[ "$line" =~ ^(WEB_MAIN_PORT|MS_GATEWAY_PORT)= ]]; then
+    if [[ "$line" =~ ^(WEB_MAIN_PORT|MS_GATEWAY_PORT|MOTION_STUDIO_PORT)= ]]; then
       export "$line"
     fi
   done < .env
   set +a
   WEB_PORT="${WEB_MAIN_PORT:-$WEB_PORT}"
   GATEWAY_PORT="${MS_GATEWAY_PORT:-$GATEWAY_PORT}"
+  STUDIO_PORT="${MOTION_STUDIO_PORT:-$STUDIO_PORT}"
 fi
 
 is_wsl() {
@@ -79,19 +81,20 @@ detect_lan_ip() {
 }
 
 ensure_ufw() {
+  local ports=("$GATEWAY_PORT" "$WEB_PORT" "$STUDIO_PORT")
   if ! command -v ufw >/dev/null 2>&1; then
-    echo "WARNING: ufw not found; skipping firewall rules for ${WEB_PORT}/tcp and ${GATEWAY_PORT}/tcp." >&2
+    echo "WARNING: ufw not found; skipping firewall rules for TCP ${ports[*]}." >&2
     return 0
   fi
   if ! sudo -n ufw status >/dev/null 2>&1; then
-    echo "Opening UFW TCP ${GATEWAY_PORT} and ${WEB_PORT} (may prompt for sudo)…"
+    echo "Opening UFW TCP ${ports[*]} (may prompt for sudo)…"
   fi
-  if ! sudo ufw allow "${GATEWAY_PORT}/tcp" >/dev/null; then
-    echo "WARNING: failed to allow ${GATEWAY_PORT}/tcp via ufw; continuing." >&2
-  fi
-  if ! sudo ufw allow "${WEB_PORT}/tcp" >/dev/null; then
-    echo "WARNING: failed to allow ${WEB_PORT}/tcp via ufw; continuing." >&2
-  fi
+  local port
+  for port in "${ports[@]}"; do
+    if ! sudo ufw allow "${port}/tcp" >/dev/null; then
+      echo "WARNING: failed to allow ${port}/tcp via ufw; continuing." >&2
+    fi
+  done
 }
 
 wait_for_port() {
@@ -135,11 +138,13 @@ echo "Starting services: ${DOCKER[*]} compose up -d $*"
 "${DOCKER[@]}" compose up -d "$@"
 
 wait_for_port 127.0.0.1 "$WEB_PORT" 180 || true
+wait_for_port 127.0.0.1 "$STUDIO_PORT" 180 || true
 
 echo
-echo "Frontend (LAN): ${FRONTEND_URL}"
-echo "Gateway (LAN):  http://${LAN_IP}:${GATEWAY_PORT}"
-echo "Follow logs:    ${DOCKER[*]} compose logs -f"
+echo "Frontend (LAN):      ${FRONTEND_URL}"
+echo "Gateway (LAN):       http://${LAN_IP}:${GATEWAY_PORT}"
+echo "Motion Studio (LAN): http://${LAN_IP}:${STUDIO_PORT}"
+echo "Follow logs:         ${DOCKER[*]} compose logs -f"
 echo
 
 if command -v xdg-open >/dev/null 2>&1; then

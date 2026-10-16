@@ -36,7 +36,7 @@ Antes del primer arranque:
 - Si falta `pmai-model-vision-language/models/gguf/gemma-4-E2B-it-Q4_K_M.gguf`, mai-core lo descarga de Hugging Face al arrancar. Hace falta red esa primera vez.
 - Opcional: `OPENAI_API_KEY` en `pmai-model-vision-language/.env`. Con red y clave se usa `gpt-4o-mini`; si no, Gemma.
 - El catálogo del turno son las secuencias ingestadas (`id`, nombre, descripción) creadas en el estudio de movimiento. `ACTION_DESCRIPTIONS_PATH` sigue existiendo, pero el turno no usa esas frases.
-- El estudio web corre en el puerto `MOTION_STUDIO_PORT` (4210). `/sequences` lo carga en un iframe. `sudo ufw allow 4210/tcp` si hace falta en la LAN.
+- El estudio web corre en el puerto `MOTION_STUDIO_PORT` (4210). `/sequences` lo carga en un iframe. `./scripts/lan-up.sh` abre ese puerto en UFW junto con 3000 y 4200.
 - Milvus Lite crea `conocimiento` e `interacciones` al arrancar mai-core. El archivo queda en `pmai-model-vision-language/utils/milvus/androide_milvus.db`.
 - El primer inicio descarga BLIP y el modelo de embeddings, y carga Gemma. Tarda.
 ### 2. Variables de entorno
@@ -61,7 +61,7 @@ Opcional: forzar la interfaz de red (por ejemplo Wi‑Fi):
 LAN_IFACE=wlp2s0 ./scripts/lan-up.sh
 ```
 
-El script detecta la IPv4 de la LAN, abre reglas UFW TCP para los puertos del gateway (3000) y la web (4200) cuando es posible, ejecuta `docker compose up -d`, espera a que el puerto 4200 responda, imprime la URL LAN (`http://<LAN_IP>:4200`) y abre el navegador en el host.
+El script detecta la IPv4 de la LAN, abre reglas UFW TCP para el gateway (3000), la web (4200) y el Motion Studio (4210) cuando es posible, ejecuta `docker compose up -d`, espera a que 4200 y 4210 respondan, imprime las URLs LAN (`http://<LAN_IP>:4200` y `http://<LAN_IP>:4210`) y abre el navegador en el frontend.
 
 Tras actualizar el frontend (por ejemplo la dependencia `qrcode`), reconstruya el servicio web una vez para refrescar `node_modules` del contenedor:
 
