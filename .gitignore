@@ -67,3 +67,5 @@ data/
 
 # local git worktrees
 .worktrees/
+
+*.hnsw.idx
