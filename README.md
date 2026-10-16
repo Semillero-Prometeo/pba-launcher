@@ -39,14 +39,47 @@ Antes del primer arranque:
 - El estudio web corre en el puerto `MOTION_STUDIO_PORT` (4210). `/sequences` lo carga en un iframe. `sudo ufw allow 4210/tcp` si hace falta en la LAN.
 - Milvus Lite crea `conocimiento` e `interacciones` al arrancar mai-core. El archivo queda en `pmai-model-vision-language/utils/milvus/androide_milvus.db`.
 - El primer inicio descarga BLIP y el modelo de embeddings, y carga Gemma. Tarda.
+### 2. Variables de entorno
 
-sudo docker compose up
+Si aún no existe `.env` en la raíz del repositorio, copie la plantilla:
+
+```bash
+cp .env.template .env
+```
+
+### 3. Inicio en red local (Ubuntu)
+
+Comando principal para levantar el stack en LAN:
+
+```bash
+./scripts/lan-up.sh
+```
+
+Opcional: forzar la interfaz de red (por ejemplo Wi‑Fi):
+
+```bash
+LAN_IFACE=wlp2s0 ./scripts/lan-up.sh
+```
+
+El script detecta la IPv4 de la LAN, abre reglas UFW TCP para los puertos del gateway (3000) y la web (4200) cuando es posible, ejecuta `docker compose up -d`, espera a que el puerto 4200 responda, imprime la URL LAN (`http://<LAN_IP>:4200`) y abre el navegador en el host.
+
+Tras actualizar el frontend (por ejemplo la dependencia `qrcode`), reconstruya el servicio web una vez para refrescar `node_modules` del contenedor:
+
+```bash
+docker compose up -d --build pmas-web-main
+```
+
+**Teléfonos y otros dispositivos:** use la URL impresa en consola o escanee **Código QR de red** después de iniciar sesión (en la primera visita al admin el modal aparece automáticamente; el menú de perfil puede reabrirlo).
+
+### Credenciales de acceso
+
 Contraseña: 12345
 
 Usuario:
 admin-prometeo@unilibre.edu.co
 Prometeo2026*
 
+### Verificación (Ubuntu nativo)
 
 sudo ufw allow 3000/tcp
 sudo ufw allow 3000/udp
@@ -67,11 +100,4 @@ Buscar pmas-web-main
 Buscar src/enviroments/ud
 Se debe cambiar la IP en gatewayUrl
 
-
-
-
-# Para agregar preguntas u orcaciones
-/home/rone/Documentos/r-one/pba-launcher/pmas-web-main/src/app/pages/robotics-chat/robotics-chat.ts
-
-Se edita decirQuickOptions o chatQuickOptions
 
