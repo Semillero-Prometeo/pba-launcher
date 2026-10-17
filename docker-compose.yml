@@ -84,6 +84,7 @@ services:
       - "9232:9232"
     volumes:
       - ./pba-ms-management/src:/usr/src/app/src
+      - ./pba-ms-management/data:/usr/src/app/data
       - /usr/src/app/node_modules
     command: npm run start:debug
     environment:
