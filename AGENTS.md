@@ -27,6 +27,8 @@ Un lanzador. Cada carpeta de primer nivel, salvo `docs/`, es un repositorio prop
 
 Una pregunta a la vez. Entra por el micrófono o por `POST /chat/question`.
 
+La pregunta llega a `MANAGEMENT_MS.chatService.chat`. Si los turnos están apagados o el modelo del sistema es `basico`, management usa OpenAI `chatStructured`, llama a `voiceService.speak` y responde `{ reply, fuente: "OpenAI", movimientos: [] }`. Si los turnos están encendidos y el modelo es `complejo`, reenvía a `MAI_CORE_MS.interactionService.ask` (pasos 1–6). El picker del chat es la elección del sistema; el micrófono usa la misma ruta.
+
 1. `interaction_turn.py` elige a la persona de mayor confianza. Empate: `id_global` menor. Sin persona: etiqueta `Persona no identificada` y sin imagen.
 2. Si hay recuadro, recorte JPEG calidad 85 y BLIP. Si BLIP falla, el contexto queda vacío y se sigue.
 3. `ROBOTICS_MS.actionService.getActions` lista pares completos (`category` + `blocks` + `blocks_neutro`) que ya tienen `id`. Almacén vacío o solo JSON legado: lista vacía, se habla y no se mueve. Eso no es un fallo del turno. Sin Arduino no es la razón de un catálogo vacío.
