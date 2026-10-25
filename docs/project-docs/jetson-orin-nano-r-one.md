@@ -161,8 +161,8 @@ Scripts en el repo:
 | Script | Función |
 |---|---|
 | `scripts/lan-up.sh` | Detecta la IPv4 de salida, Compose, migraciones, seed, imprime URLs LAN |
-| `scripts/lan-down.sh` | Detiene el stack (`compose down`) |
-| `scripts/lan-restart.sh` | Baja y vuelve a levantar (`lan-down` + `lan-up`) |
+| `scripts/lan-down.sh` | Detiene el stack (`compose stop`). No borra contenedores |
+| `scripts/lan-restart.sh` | `compose stop` y `compose start` (los mismos contenedores) |
 | `scripts/wifi-up.sh` | Une Wi-Fi o enciende el hotspot y luego llama a `lan-up.sh` |
 | `scripts/seed-auth.sh` | Migraciones y usuarios admin |
 
@@ -261,11 +261,16 @@ cd ~/pba-launcher
 docker compose logs -f
 ```
 
-Parar:
+Parar (sin borrar contenedores):
 
 ```bash
-cd ~/pba-launcher
-docker compose down
+rone-down
+```
+
+Reiniciar los mismos contenedores:
+
+```bash
+rone-restart
 ```
 
 El primer `compose up` puede tardar mucho y usar varios GB. Si el disco se acerca a 100 %, hay ~16 GB en `/home/jetson/workspaces` y ~8 GB en `/home/jetson/.cache` de la imagen Yahboom, candidatos a limpiar **después** de confirmar que no se necesitan.

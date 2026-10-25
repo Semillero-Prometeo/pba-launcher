@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop the R-ONE Compose stack. Images and database volume stay on disk.
+# Pause the R-ONE stack. Containers stay created (compose stop, not down).
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -15,6 +15,6 @@ if ! docker info >/dev/null 2>&1; then
   fi
 fi
 
-echo "Stopping R-ONE: ${DOCKER[*]} compose down $*"
-"${DOCKER[@]}" compose down "$@"
-echo "R-ONE is stopped. Start again with ./scripts/lan-up.sh (or rone-up)."
+echo "Stopping R-ONE: ${DOCKER[*]} compose stop $*"
+"${DOCKER[@]}" compose stop "$@"
+echo "R-ONE is stopped. Containers remain. Start again with rone-restart or ./scripts/lan-restart.sh."
