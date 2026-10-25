@@ -15,7 +15,7 @@ if [[ -f .env ]]; then
   while IFS= read -r line || [[ -n "$line" ]]; do
     [[ "$line" =~ ^[[:space:]]*# ]] && continue
     [[ -z "${line//[[:space:]]/}" ]] && continue
-    if [[ "$line" =~ ^(WEB_MAIN_PORT|MS_GATEWAY_PORT|MOTION_STUDIO_PORT)= ]]; then
+    if [[ "$line" =~ ^(WEB_MAIN_PORT|MS_GATEWAY_PORT|MOTION_STUDIO_PORT|DB_USER)= ]]; then
       export "$line"
     fi
   done < .env
@@ -188,6 +188,57 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
   fi
 fi
+
+wait_for_db() {
+  local start
+  start="$(date +%s)"
+  echo "Waiting for Postgres…"
+  while true; do
+    if "${DOCKER[@]}" compose exec -T db pg_isready -U "${DB_USER:-postgres}" >/dev/null 2>&1; then
+      echo "Postgres is ready."
+      return 0
+    fi
+    if (( $(date +%s) - start >= 90 )); then
+      echo "ERROR: Postgres did not become ready. Check disk space and: ${DOCKER[*]} compose logs db" >&2
+      "${DOCKER[@]}" compose logs --tail=20 db >&2 || true
+      return 1
+    fi
+    sleep 2
+  done
+}
+
+wait_for_auth_exec() {
+  local start
+  start="$(date +%s)"
+  echo "Waiting for pba-ms-auth…"
+  while true; do
+    if "${DOCKER[@]}" compose exec -T pba-ms-auth node -e "process.exit(0)" >/dev/null 2>&1; then
+      return 0
+    fi
+    if (( $(date +%s) - start >= 120 )); then
+      echo "ERROR: pba-ms-auth is not ready for prisma." >&2
+      "${DOCKER[@]}" compose logs --tail=30 pba-ms-auth >&2 || true
+      return 1
+    fi
+    sleep 3
+  done
+}
+
+ensure_auth_seed() {
+  wait_for_auth_exec || return 1
+  echo "Applying auth migrations…"
+  "${DOCKER[@]}" compose exec -T pba-ms-auth npx prisma migrate deploy
+  echo "Seeding admin users (idempotent)…"
+  "${DOCKER[@]}" compose exec -T pba-ms-auth npx prisma db seed
+}
+
+echo "Starting database…"
+"${DOCKER[@]}" compose up -d db nats-server
+wait_for_db
+
+echo "Starting auth (migrations + seed)…"
+"${DOCKER[@]}" compose up -d pba-ms-auth
+ensure_auth_seed
 
 echo "Starting services: ${DOCKER[*]} compose up -d $*"
 "${DOCKER[@]}" compose up -d "$@"

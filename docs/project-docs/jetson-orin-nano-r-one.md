@@ -147,8 +147,11 @@ En `~/.bashrc` del usuario `jetson`:
 ```bash
 export RONE_HOME="$HOME/pba-launcher"
 rone-up() { (cd "$RONE_HOME" && ./scripts/lan-up.sh "$@"); }
+rone-down() { (cd "$RONE_HOME" && ./scripts/lan-down.sh "$@"); }
+rone-restart() { (cd "$RONE_HOME" && ./scripts/lan-restart.sh "$@"); }
 rone-wifi() { (cd "$RONE_HOME" && ./scripts/wifi-up.sh "$@"); }
 rone-status() { (cd "$RONE_HOME" && ./scripts/wifi-up.sh status); }
+rone-seed() { (cd "$RONE_HOME" && ./scripts/seed-auth.sh "$@"); }
 ```
 
 Hay que abrir una sesión SSH nueva (o `source ~/.bashrc`) para usar los alias.
@@ -157,8 +160,11 @@ Scripts en el repo:
 
 | Script | Función |
 |---|---|
-| `scripts/lan-up.sh` | Detecta la IPv4 de salida, `docker compose up -d`, imprime URLs LAN |
+| `scripts/lan-up.sh` | Detecta la IPv4 de salida, Compose, migraciones, seed, imprime URLs LAN |
+| `scripts/lan-down.sh` | Detiene el stack (`compose down`) |
+| `scripts/lan-restart.sh` | Baja y vuelve a levantar (`lan-down` + `lan-up`) |
 | `scripts/wifi-up.sh` | Une Wi-Fi o enciende el hotspot y luego llama a `lan-up.sh` |
+| `scripts/seed-auth.sh` | Migraciones y usuarios admin |
 
 `lan-up.sh` ahora:
 
@@ -191,6 +197,26 @@ sudo systemctl restart docker
 ```
 
 Eso relaja el filtrado “direct access” de Docker 28: en esta LAN del androide es aceptable. Tras el reinicio, `rone-up` puede volver a construir.
+
+### 3.8 Disco lleno y usuarios seed (25 oct 2026)
+
+Tras el primer build el NVMe quedó al **100 %** (171/172 GB, 0 B libres). Postgres no pudo hacer `initdb` (`pg_wal: No space left on device`), el gateway salió con P1001 y no había usuarios porque **nunca existió la base**.
+
+`lan-up.sh` ahora espera Postgres, aplica `prisma migrate deploy` y `prisma db seed` en `pba-ms-auth` antes de levantar el resto. Re-seed manual: `./scripts/seed-auth.sh`.
+
+Limpieza hecha (no toca JetPack ni las imágenes de R-ONE ya construidas):
+
+| Qué | ~Tamaño | Por qué es viable |
+|---|---|---|
+| Caché de build Docker (`docker builder prune`) | 18 GB | Las imágenes `pba-launcher-*` ya están compiladas |
+| `/usr/share/ollama` | 37 GB | Modelos Ollama del kit; R-ONE usa Gemma en `pmai-core`, no Ollama |
+| `workspaces/isaac_ros-dev/isaac_ros_assets` | 15 GB | Assets de Isaac ROS; no los usa el lanzador |
+| `~/.cache/{huggingface,uv,pip}` | 8 GB | Caché del host; los contenedores no la montan |
+| `/var/log/uvcdynctrl-udev.log` | 6.5 GB | Spam udev de la webcam, no es el sistema |
+| `Templates/yahboom_ws.zip` | 1 GB | Zip duplicado de `yahboom_ws/` |
+| Snaps deshabilitados | ~1 GB | Revisiones viejas (`core22/24`, `cups`, `snapd`) |
+
+No se borra: `/usr/local/cuda*`, `/usr` de JetPack, `/home/jetson/pba-launcher`, ni las imágenes Docker en uso (`pmai-core` ~13 GB).
 
 ---
 

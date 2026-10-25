@@ -55,6 +55,17 @@ Comando principal para levantar el stack en LAN:
 ./scripts/lan-up.sh
 ```
 
+En la Jetson (tras `source ~/.bashrc`) los mismos pasos son `rone-up`, `rone-down` y `rone-restart`.
+
+| Comando | Script | Qué hace |
+|---|---|---|
+| `rone-up` | `./scripts/lan-up.sh` | Detecta la IPv4 LAN, abre UFW si hay, levanta Compose, aplica migraciones y seed, imprime URLs |
+| `rone-down` | `./scripts/lan-down.sh` | Detiene el stack (`docker compose down`). Conserva imágenes y la base |
+| `rone-restart` | `./scripts/lan-restart.sh` | `rone-down` y luego `rone-up` |
+| `rone-status` | `./scripts/wifi-up.sh status` | Muestra interfaces, ruta por defecto y las URLs para teléfonos |
+| `rone-wifi` | `./scripts/wifi-up.sh` | `scan` / `join "SSID" "clave"` / `hotspot` y después arranca en esa red |
+| `rone-seed` | `./scripts/seed-auth.sh` | Reaplica migraciones y usuarios admin (idempotente) |
+
 Opcional: forzar la interfaz de red (por ejemplo Wi‑Fi):
 
 ```bash
