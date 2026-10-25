@@ -56,6 +56,7 @@ La pregunta llega a `MANAGEMENT_MS.chatService.chat`. Si los turnos están apaga
 | `docs/project-docs/high-level-action-model.jpeg` | Descripción de escena y respuesta con gesto |
 | `docs/project-docs/model-vision-project.md` | Fases del detector y las 802 imágenes |
 | `docs/project-docs/informe-horas-sociales.md` | Informe de horas. No lo uses como especificación técnica |
+| `docs/project-docs/jetson-orin-nano-r-one.md` | MiniPC Jetson Orin Nano: ficha, bitácora y Wi-Fi de campo |
 | `README.md` | Comandos para levantar el lanzador |
 
 ## Reglas

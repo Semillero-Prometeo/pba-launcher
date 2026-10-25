@@ -39,44 +39,95 @@ iface_skipped() {
   [[ "$name" == docker* ]] && return 0
   [[ "$name" == br-* ]] && return 0
   [[ "$name" == veth* ]] && return 0
+  [[ "$name" == l4tbr* ]] && return 0
+  [[ "$name" == usb0 || "$name" == usb1 ]] && return 0
+  [[ "$name" == can* ]] && return 0
   return 1
 }
 
 iface_preferred() {
-  local name="$1"
-  [[ "$name" == wlan* || "$name" == wlp* || "$name" == eth* || "$name" == en* ]]
+  local lower
+  lower="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  # Jetson names look like wlP1p1s0 / enP8p1s0; compare in lowercase.
+  [[ "$lower" == wlan* || "$lower" == wlp* || "$lower" == wl* || "$lower" == eth* || "$lower" == en* ]]
 }
 
+default_route_dev() {
+  ip -4 route show default 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "dev") { print $(i + 1); exit }}'
+}
+
+default_route_src() {
+  ip -4 route show default 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}'
+}
+
+# Address the kernel would use to leave the LAN (avoids leftover static IPs on the same NIC).
+outbound_src() {
+  ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}'
+}
+
+ipv4_on_iface() {
+  local name="$1"
+  local prefer="${2:-}"
+  local addr
+  if [[ -n "$prefer" ]] && ip -4 -o addr show dev "$name" 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | grep -qx "$prefer"; then
+    echo "$prefer"
+    return 0
+  fi
+  while read -r addr; do
+    [[ -z "$addr" || "$addr" == 169.254.* ]] && continue
+    echo "$addr"
+    return 0
+  done < <(ip -4 -o addr show dev "$name" 2>/dev/null | awk '{print $4}' | cut -d/ -f1)
+  return 1
+}
+
+# Sets DETECTED_LAN_IFACE and DETECTED_LAN_IP (must not run in a subshell).
 detect_lan_ip() {
-  local name addr
+  local name addr src
+  src="$(outbound_src || true)"
+  [[ -n "$src" ]] || src="$(default_route_src || true)"
+
   if [[ -n "${LAN_IFACE:-}" ]]; then
-    addr="$(ip -4 -o addr show dev "$LAN_IFACE" 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1 || true)"
+    addr="$(ipv4_on_iface "$LAN_IFACE" "$src" || true)"
     if [[ -z "$addr" ]]; then
       echo "ERROR: No IPv4 on LAN_IFACE=$LAN_IFACE" >&2
       exit 1
     fi
-    echo "$addr"
+    DETECTED_LAN_IFACE="$LAN_IFACE"
+    DETECTED_LAN_IP="$addr"
     return 0
   fi
 
-  # Prefer wifi/ethernet
+  name="$(default_route_dev || true)"
+  if [[ -n "$name" ]] && ! iface_skipped "$name"; then
+    addr="$(ipv4_on_iface "$name" "$src" || true)"
+    if [[ -n "$addr" ]]; then
+      DETECTED_LAN_IFACE="$name"
+      DETECTED_LAN_IP="$addr"
+      return 0
+    fi
+  fi
+
   while read -r name addr; do
     iface_skipped "$name" && continue
     iface_preferred "$name" || continue
+    [[ "$addr" == 169.254.* ]] && continue
     [[ -n "$addr" ]] || continue
-    echo "$addr"
+    DETECTED_LAN_IFACE="$name"
+    DETECTED_LAN_IP="$addr"
     return 0
   done < <(ip -4 -o addr show | awk '{gsub(/\/.*/, "", $4); print $2, $4}')
 
-  # Fallback: any non-skipped interface
   while read -r name addr; do
     iface_skipped "$name" && continue
+    [[ "$addr" == 169.254.* ]] && continue
     [[ -n "$addr" ]] || continue
-    echo "$addr"
+    DETECTED_LAN_IFACE="$name"
+    DETECTED_LAN_IP="$addr"
     return 0
   done < <(ip -4 -o addr show | awk '{gsub(/\/.*/, "", $4); print $2, $4}')
 
-  echo "ERROR: No usable LAN IPv4 found. Set LAN_IFACE=<interface> (e.g. wlp2s0) and retry." >&2
+  echo "ERROR: No usable LAN IPv4 found. Set LAN_IFACE=<interface> (e.g. wlP1p1s0) and retry." >&2
   exit 1
 }
 
@@ -119,8 +170,12 @@ wait_for_port() {
   done
 }
 
-LAN_IP="$(detect_lan_ip)"
+DETECTED_LAN_IFACE=""
+DETECTED_LAN_IP=""
+detect_lan_ip
+LAN_IP="$DETECTED_LAN_IP"
 FRONTEND_URL="http://${LAN_IP}:${WEB_PORT}"
+echo "LAN: ${DETECTED_LAN_IFACE:-?} ${LAN_IP}"
 
 ensure_ufw
 
