@@ -64,12 +64,21 @@ En la Jetson (tras `source ~/.bashrc`) los mismos pasos son `rone-up`, `rone-dow
 | `rone-restart` | `./scripts/lan-restart.sh` | `compose stop` y luego `compose start` (no recrea contenedores) |
 | `rone-status` | `./scripts/wifi-up.sh status` | Muestra interfaces, ruta por defecto y las URLs para teléfonos |
 | `rone-wifi` | `./scripts/wifi-up.sh` | `scan` / `join "SSID" "clave"` / `hotspot` y después arranca en esa red |
+| `rone-bt` | `./scripts/bt-up.sh` | `scan` / `connect` / `disconnect` / `status` — parlante Bluetooth (Thinkplus-K3-pro) |
 | `rone-seed` | `./scripts/seed-auth.sh` | Reaplica migraciones y usuarios admin (idempotente) |
 
 Opcional: forzar la interfaz de red (por ejemplo Wi‑Fi):
 
 ```bash
 LAN_IFACE=wlp2s0 ./scripts/lan-up.sh
+```
+
+Parlante Bluetooth (sin GUI; el audio de robótica sale por Pulse del host):
+
+```bash
+rone-bt scan
+rone-bt connect                    # Thinkplus-K3-pro por defecto
+rone-bt status
 ```
 
 El script detecta la IPv4 de la LAN, abre reglas UFW TCP para el gateway (3000), la web (4200) y el Motion Studio (4210) cuando es posible, ejecuta `docker compose up -d`, espera a que 4200 y 4210 respondan, imprime las URLs LAN (`http://<LAN_IP>:4200` y `http://<LAN_IP>:4210`) y abre el navegador en el frontend.

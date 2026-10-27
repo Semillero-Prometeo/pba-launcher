@@ -3,7 +3,7 @@
 Fecha de puesta en marcha: 25 de octubre de 2026  
 Equipo: `jetson-w4`  
 Usuario: `jetson`  
-SSH (red actual del laboratorio): `ssh jetson@192.168.40.9`  
+SSH: `ssh jetson@192.168.80.23` (la IPv4 cambia con la red; `ping jetson-w4.local`)  
 Repositorio en la placa: `/home/jetson/pba-launcher`
 
 Este archivo es la ficha de la placa y la bitácora de lo que se configuró para que R-ONE arranque con un comando cuando cambie la red del androide.
@@ -150,6 +150,7 @@ rone-up() { (cd "$RONE_HOME" && ./scripts/lan-up.sh "$@"); }
 rone-down() { (cd "$RONE_HOME" && ./scripts/lan-down.sh "$@"); }
 rone-restart() { (cd "$RONE_HOME" && ./scripts/lan-restart.sh "$@"); }
 rone-wifi() { (cd "$RONE_HOME" && ./scripts/wifi-up.sh "$@"); }
+rone-bt() { (cd "$RONE_HOME" && ./scripts/bt-up.sh "$@"); }
 rone-status() { (cd "$RONE_HOME" && ./scripts/wifi-up.sh status); }
 rone-seed() { (cd "$RONE_HOME" && ./scripts/seed-auth.sh "$@"); }
 ```
@@ -164,6 +165,7 @@ Scripts en el repo:
 | `scripts/lan-down.sh` | Detiene el stack (`compose stop`). No borra contenedores |
 | `scripts/lan-restart.sh` | `compose stop` y `compose start` (los mismos contenedores) |
 | `scripts/wifi-up.sh` | Une Wi-Fi o enciende el hotspot y luego llama a `lan-up.sh` |
+| `scripts/bt-up.sh` | Empareja y conecta el parlante Bluetooth (A2DP) |
 | `scripts/seed-auth.sh` | Migraciones y usuarios admin |
 
 `lan-up.sh` ahora:
@@ -285,7 +287,7 @@ Hay dos modos. En ambos, Compose ya publica `0.0.0.0:3000/4200/4210`. No se reco
 
 El androide, los teléfonos y los portátiles quedan en la misma red del recinto.
 
-1. SSH a la Jetson (si ya no responde `192.168.40.9`, usar pantalla + teclado, o `ping jetson-w4.local`).
+1. SSH a la Jetson (si la IP cambió: `ping jetson-w4.local` o pantalla + teclado).
 2. Escanear y unirse:
 
 ```bash
@@ -347,15 +349,40 @@ LAN_IFACE=wlP1p1s0 ./scripts/lan-up.sh
 2. En la propia placa: `hostname -I` o `rone-status`.
 3. En el router del recinto: buscar el hostname `jetson-w4` o la MAC `74:25:54:16:46:93` (ethernet).
 
-SSH de laboratorio (mientras siga el DHCP `192.168.40.0/24`):
+SSH (la IP cambia con la red; hoy en campo: `192.168.80.23`):
 
 ```bash
-ssh jetson@192.168.40.9
+ssh jetson@192.168.80.23
+# o: ssh jetson@jetson-w4.local
 ```
 
 ---
 
-## 6. Qué no hay que hacer al cambiar de red
+## 6. Parlante Bluetooth (sin GUI)
+
+Robótica reproduce TTS en el **PulseAudio del host** (`MS_ROBOTICS_PULSE_SERVER=unix:/run/user/1000/pulse/native`). El contenedor elige solo un sink cuyo nombre lleve `bluez`. No hace falta escritorio.
+
+Parlante de campo: **Thinkplus-K3-pro** (BlueZ lo muestra como `联想Thinkplus-K3 pro`, MAC `36:F0:0F:3D:86:DE`). Ya está emparejado y en *trust*.
+
+```bash
+rone-bt scan                         # el parlante debe estar encendido / en emparejar
+rone-bt connect                      # Thinkplus-K3-pro por defecto
+rone-bt connect "Otro parlante"
+rone-bt status
+rone-bt disconnect
+```
+
+Tras `connect` suena un tono de prueba (`Front_Center.wav`) y Pulse deja A2DP como default sink. Si el microservicio de voz ya estaba arriba:
+
+```bash
+docker compose restart pba-ms-robotics
+```
+
+JetPack 6.2 arranca `bluetoothd --noplugin=audio,a2dp,avrcp` (drop-in NVIDIA). Sin A2DP el parlante cae a manos libres (16 kHz). Quedó anulado en `/etc/systemd/system/bluetooth.service.d/rone-a2dp.conf`. También se instaló `pulseaudio-module-bluetooth` y se enmascaró `pipewire-media-session` para que Pulse sea el dueño del BT.
+
+---
+
+## 7. Qué no hay que hacer al cambiar de red
 
 - No editar `pmas-web-main/src/environments/environment.ts`.
 - No reconstruir imágenes solo porque cambió el SSID.
@@ -370,7 +397,7 @@ sudo nmcli device reapply enP8p1s0
 
 ---
 
-## 7. Límites de esta placa como miniPC
+## 8. Límites de esta placa como miniPC
 
 - **8 GB de RAM** para Postgres, NATS, varios Node, Angular (`NODE_OPTIONS=4096` en compose), robótica, BLIP y Gemma. El primer arranque va a ser lento; si hay OOM, bajar el heap de Angular o no levantar Motion Studio en demos.
 - **~30 GB libres** hoy. El build de `pmai-core` y el GGUF de Gemma caben si no se llenan con imágenes Docker viejas (`docker system prune` si hace falta).
@@ -379,7 +406,7 @@ sudo nmcli device reapply enP8p1s0
 
 ---
 
-## 8. Comandos de comprobación
+## 9. Comandos de comprobación
 
 ```bash
 # red
@@ -397,6 +424,7 @@ cd ~/pba-launcher
 git submodule status
 docker compose config -q
 rone-status
+rone-bt status
 ```
 
 Estado al cerrar esta puesta en marcha: red con internet, Docker listo, repo clonado con submódulos, `.env` en su sitio, scripts de LAN/Wi-Fi instalados, hotspot en modo `shared`. El primer `rone-up` es el que construye y levanta el stack.
