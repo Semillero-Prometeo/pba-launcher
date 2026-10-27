@@ -120,6 +120,7 @@ services:
       - ./pba-ms-robotics:/usr/src/app
       - ${GCLOUD_CONFIG_PATH:-~/.config/gcloud}:/root/.config/gcloud
       - /run/user/1000/pulse:/run/user/1000/pulse
+      - ${PULSE_COOKIE_PATH:-${HOME}/.config/pulse/cookie}:/root/.config/pulse/cookie:ro
     command: uvicorn src.app:app --host 0.0.0.0 --port ${MS_ROBOTICS_PORT} --reload --reload-dir /usr/src/app --reload-exclude .venv
     environment:
       - NATS_SERVER=nats://nats-server:4222
@@ -130,6 +131,7 @@ services:
       - VOICE_SKIP_PLAYBACK=${MS_ROBOTICS_VOICE_SKIP_PLAYBACK:-0}
       # PulseAudio del HOST (imprescindible para Bluetooth): ej. unix:/run/user/1000/pulse/native
       - PULSE_SERVER=${MS_ROBOTICS_PULSE_SERVER:-}
+      - PULSE_COOKIE=/root/.config/pulse/cookie
       # TTS OpenAI online (misma clave que management si no defines MS_ROBOTICS_OPENAI_API_KEY)
       - VOICE_TTS_MODE=${MS_ROBOTICS_VOICE_TTS_MODE}
       - OPENAI_API_KEY=${MS_ROBOTICS_OPENAI_API_KEY}

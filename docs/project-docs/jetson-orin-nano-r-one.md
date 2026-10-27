@@ -360,7 +360,7 @@ ssh jetson@192.168.80.23
 
 ## 6. Parlante Bluetooth (sin GUI)
 
-Robótica reproduce TTS en el **PulseAudio del host** (`MS_ROBOTICS_PULSE_SERVER=unix:/run/user/1000/pulse/native`). El contenedor elige solo un sink cuyo nombre lleve `bluez`. No hace falta escritorio.
+Robótica reproduce TTS en el **PulseAudio del host** (`MS_ROBOTICS_PULSE_SERVER=unix:/run/user/1000/pulse/native`). El contenedor elige un sink cuyo nombre lleve `bluez`. Compose monta también `~/.config/pulse/cookie`; sin esa cookie Pulse responde `Access denied` (el MS corre como root). No hace falta escritorio.
 
 Parlante de campo: **Thinkplus-K3-pro** (BlueZ lo muestra como `联想Thinkplus-K3 pro`, MAC `36:F0:0F:3D:86:DE`). Ya está emparejado y en *trust*.
 
