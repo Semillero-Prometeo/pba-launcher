@@ -240,6 +240,9 @@ echo "Starting auth (migrations + seed)…"
 "${DOCKER[@]}" compose up -d pba-ms-auth
 ensure_auth_seed
 
+echo "Seeding Milvus conocimiento…"
+./scripts/seed-conocimiento.sh
+
 echo "Starting services: ${DOCKER[*]} compose up -d $*"
 "${DOCKER[@]}" compose up -d "$@"
 
