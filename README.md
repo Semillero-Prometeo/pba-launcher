@@ -100,3 +100,41 @@ docker compose up -d --build pmas-web-main
 
 **Teléfonos y otros dispositivos:** use la URL impresa en consola o escanee **Código QR de red** después de iniciar sesión (en la primera visita al admin el modal aparece automáticamente; el menú de perfil puede reabrirlo).
 
+### 4. Turno de interacción (mai-core, contexto y acción)
+
+El chat web y el micrófono entran por `chatService.chat`. Si los turnos están apagados o el modelo es básico, management llama a OpenAI, habla y no mueve. Si los turnos están encendidos y el modelo es complejo, mai-core arma el turno. Ahí la memoria se consulta antes que cualquier modelo: primero `conocimiento` (lo sembrado desde `preguntas_respuestas.json`) y, si no hay acierto, `interacciones` (respuestas ya generadas, y solo si el texto coincide). Eso es el caché. Sin acierto, y si hay clave, responde la API de OpenAI. Si no hay clave o la API falla, responde Gemma en la Jetson. `declarePoema` no usa este camino: sigue en OpenAI y sí habla.
+
+```mermaid
+flowchart TD
+  Q["Pregunta: micrófono o chat"] --> Ruta{"Turnos encendidos y modelo complejo"}
+  Ruta -->|No| Basico["OpenAI en management"]
+  Basico --> BasicoFin["Habla. movimientos vacíos. fuente OpenAI"]
+  Ruta -->|Sí| Turno["mai-core, una pregunta a la vez"]
+  Turno --> Corta{"Voz con menos de 14 caracteres"}
+  Corta -->|Sí| VozCorta["Pide repetir. fuente voz corta"]
+  Corta -->|No| Ocupado{"Ya hay un turno en curso"}
+  Ocupado -->|Sí| OcupadoFin["Sigo respondiendo. fuente ocupado"]
+  Ocupado -->|No| Persona["Elige a la persona de mayor confianza"]
+  Persona --> Recuadro{"Hay recuadro en la cámara"}
+  Recuadro -->|Sí| Blip["BLIP describe el recorte. Si falla, el contexto queda vacío"]
+  Recuadro -->|No| Catalogo
+  Blip --> Catalogo["Pide el catálogo de gestos de esta llamada"]
+  Catalogo --> Conocimiento["Milvus: colección conocimiento"]
+  Conocimiento --> HitCon{"¿Acierto?"}
+  HitCon -->|Sí| Cache
+  HitCon -->|No| Interacciones["Milvus: interacciones, solo texto exacto"]
+  Interacciones --> HitInt{"¿Acierto?"}
+  HitInt -->|Sí| Cache["Caché. Antepone el nombre y, si hay imagen, una apertura. fuente caché"]
+  HitInt -->|No| Clave{"¿Hay clave OpenAI?"}
+  Clave -->|Sí| Api["API gpt-4o-mini"]
+  Api --> ApiOk{"¿La API respondió?"}
+  ApiOk -->|Sí| OpenAI["fuente OpenAI"]
+  ApiOk -->|No| Gemma
+  Clave -->|No| Gemma["Gemma local en la Jetson"]
+  Gemma --> Local["fuente Gemma local"]
+  OpenAI --> Guardar["Guarda la respuesta en interacciones, sin el nombre"]
+  Local --> Guardar
+  Cache --> Salida
+  Guardar --> Salida["Filtra los gestos al catálogo, máximo 3. Habla y encola cada gesto"]
+  Salida --> Pantalla["La pantalla recibe reply, fuente y movimientos"]
+```
