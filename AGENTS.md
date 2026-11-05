@@ -51,8 +51,9 @@ La pregunta llega a `MANAGEMENT_MS.chatService.chat`. Si los turnos están apaga
 
 | Archivo | Úsalo para |
 |---|---|
-| `docs/project-docs/1. Documentación del Proyecto - Inteligencia Artificial Multimodal y Robótica Autonoma.md` | Memoria académica del sistema |
-| `docs/project-docs/project-start-plan.png` | Los nueve hitos originales |
+| `docs/project-docs/r-one-documentacion-integral.md` | Documentación integral: conceptos, arquitectura, flujos, repositorios, operación e historia |
+| `docs/project-docs/archivo/` | Memoria académica anterior. Solo consulta histórica |
+| `docs/project-docs/project-start-plan.png` | Los ocho hitos originales |
 | `docs/project-docs/high-level-action-model.jpeg` | Descripción de escena y respuesta con gesto |
 | `docs/project-docs/model-vision-project.md` | Fases del detector y las 802 imágenes |
 | `docs/project-docs/informe-horas-sociales.md` | Informe de horas. No lo uses como especificación técnica |

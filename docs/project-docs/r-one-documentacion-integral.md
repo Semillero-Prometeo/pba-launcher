@@ -624,7 +624,7 @@ Por cada id, robótica encola cuatro pasos: la versión normal, una espera de un
 
 Desde el panel o el estudio, `startPlayback` rechaza una nueva reproducción si la cola está ocupada. Por eso la interfaz deshabilita los botones de gesto mientras el hardware trabaja y solo deja activo Detener. Detener vacía la cola, pero no envía nada al Arduino: los servos terminan de llegar a la última posición que recibieron.
 
-Aquí hay una trampa importante del código actual. `ActionController` (que atiende al turno) y `SequenceController` (que atiende al panel y al estudio) crean cada uno su propio `SequenceService`, y cada servicio tiene su propia cola. En consecuencia, el cajón de runtime de la web y el botón Detener solo ven los gestos lanzados desde el panel o el estudio, no los del turno. Las pruebas no lo detectan porque usan una sola instancia (pendiente de confirmar en el hardware, aunque se deduce directamente del código).
+Aquí hay una trampa importante del código actual. `ActionController` (que atiende al turno) y `SequenceController` (que atiende al panel y al estudio) crean cada uno su propio `SequenceService`, y cada servicio tiene su propia cola. En consecuencia, el cajón de runtime de la web y el botón Detener solo ven los gestos lanzados desde el panel o el estudio, no los del turno. Las pruebas no lo detectan porque usan una sola instancia (pendiente de confirmar: en el hardware, aunque se deduce directamente del código).
 
 Si no hay ningún Arduino conectado, robótica descarta los pasos de movimiento y solo consume las esperas. En ese caso, el gesto "ocurre" en la cola, pero no mueve nada.
 
@@ -850,7 +850,7 @@ R-ONE usa siete modelos de inteligencia artificial. Algunos vienen dentro del re
 | Gemma 4 E2B Q4_K_M | Respuestas sin internet | `pmai-model-vision-language/models/gguf/gemma-4-E2B-it-Q4_K_M.gguf` | 2,9 GB | Hugging Face, `unsloth/gemma-4-E2B-it-GGUF`, si falta |
 | Piper es_ES davefx | Voz local | `pba-ms-robotics/src/core/models/voice/es_ES-davefx-medium.onnx` | 61 MB | En el repositorio |
 
-El núcleo precarga Milvus, BLIP, el modelo de embeddings y Gemma al arrancar, en `pmai-mai-core/src/pmai_core/pipeline/runtime.py`, para que el primer turno no pague esa espera. El precio es que el contenedor tarda varios minutos en estar listo la primera vez. Compose no monta un volumen para la caché de Hugging Face, así que BLIP y los embeddings probablemente se vuelven a descargar cada vez que se recrea el contenedor (pendiente de confirmar dónde queda esa caché dentro de la imagen). El GGUF, en cambio, se guarda en la carpeta montada del repositorio y sobrevive.
+El núcleo precarga Milvus, BLIP, el modelo de embeddings y Gemma al arrancar, en `pmai-mai-core/src/pmai_core/pipeline/runtime.py`, para que el primer turno no pague esa espera. El precio es que el contenedor tarda varios minutos en estar listo la primera vez. Compose no monta un volumen para la caché de Hugging Face, así que BLIP y los embeddings probablemente se vuelven a descargar cada vez que se recrea el contenedor (pendiente de confirmar: dónde queda esa caché dentro de la imagen). El GGUF, en cambio, se guarda en la carpeta montada del repositorio y sobrevive.
 
 ## Parte III. Repositorios
 
@@ -1607,7 +1607,7 @@ Hay dos instancias de `SequenceService` y por tanto dos colas. `create_subscribe
 
 El catálogo está vacío si la descripción tiene menos de diez caracteres, aunque el par sea perfecto y el Arduino esté enchufado. La ingesta acepta descripción vacía, de modo que se puede guardar una secuencia que nunca aparecerá en el turno. De dónde salieron las 31 secuencias actuales sin descripción queda pendiente de confirmar: el estudio exige diez caracteres al guardar, así que probablemente se migraron por otra vía. Mientras no se describan, el turno no mueve el cuerpo; lanzarlos a mano desde el panel sí funciona, porque el panel no filtra por descripción.
 
-El binario Piper de la imagen es `linux_x86_64`. En la Jetson (`aarch64`) `shutil.which("piper")` lo encuentra, y un error de ejecución no cae a eSpeak. Si esa imagen se construyó así en campo, y cómo se comporta, queda pendiente de confirmar. Abrir un puerto serie reinicia el Arduino y bloquea 1,8 s; el estudio consulta `/sequence/arduinos` cada 5 s. Los `arduino_id` dependen del orden alfabético de los dispositivos: reconectar un USB puede cambiar qué placa es la 0. Un JSON inválido en la carpeta rompe a la vez `listSequences`, `getActions` y `executeAction`. `executeAction` y `as_commands` releen todos los JSON en cada llamada. No se cambia `WAIT_SECONDS` ni el orden de los cuatro pasos: las pruebas y `AGENTS.md` los fijan.
+El binario Piper de la imagen es `linux_x86_64`. En la Jetson (`aarch64`) `shutil.which("piper")` lo encuentra, y un error de ejecución no cae a eSpeak. Si esa imagen se construyó así en campo, y cómo se comporta, queda pendiente de confirmar: no se midió en aarch64. Abrir un puerto serie reinicia el Arduino y bloquea 1,8 s; el estudio consulta `/sequence/arduinos` cada 5 s. Los `arduino_id` dependen del orden alfabético de los dispositivos: reconectar un USB puede cambiar qué placa es la 0. Un JSON inválido en la carpeta rompe a la vez `listSequences`, `getActions` y `executeAction`. `executeAction` y `as_commands` releen todos los JSON en cada llamada. No se cambia `WAIT_SECONDS` ni el orden de los cuatro pasos: las pruebas y `AGENTS.md` los fijan.
 
 Las frases de «Decir oración» viven en `PHRASES_PATH`. Si el archivo falta o `items` está vacío, se siembran 25 frases (saludos al Colegio Militar Patria, carreras, presentaciones). Si está corrupto, lanza error 500 y no lo sobrescribe. Pronunciar una frase no tiene sujeto propio: la interfaz usa `POST /voice/speak`. `ACTION_DESCRIPTIONS_PATH` y `pba-ms-robotics/src/action/descriptions.py` existen y nadie en `src` los importa: las descripciones del turno salen del campo `description` del JSON canónico.
 
@@ -2638,7 +2638,7 @@ Ese mapa de personas se cruzó, al arrancar, con un plan de trabajo dibujado a m
 
 ![Plan de arranque de R-ONE dibujado a mano, con ocho hitos y un recuadro de flujo real](assets/project-start-plan.png)
 
-*Figura VI-0. Plan de arranque: ocho hitos, no nueve; el recuadro "Flujo real" desglosa el hito 3. Fuente: semillero Prometeo.*
+*Figura 2. Plan de arranque: ocho hitos, no nueve; el recuadro "Flujo real" desglosa el hito 3. Fuente: semillero Prometeo.*
 
 Cada hito se lee hoy contra el código, no contra la intención original.
 
@@ -2671,7 +2671,7 @@ ffmpeg -i video.mp4 -vf fps=1 imagen_%04d.jpg
 
 ![Fotogramas extraídos con FFmpeg de un video de una integrante del semillero, numerados de imagen_0001 a imagen_00022](assets/fig-vi-extraccion-fotogramas.png)
 
-*Figura VI-1. Fotogramas extraídos a un cuadro por segundo; la carpeta corresponde a una integrante. Fuente: memoria académica 2026.*
+*Figura 3. Fotogramas extraídos a un cuadro por segundo; la carpeta corresponde a una integrante. Fuente: memoria académica 2026.*
 
 Ese material no va directo al entrenamiento. El cuaderno de `pmai-model-vision` descomprime la exportación de Label Studio (`dataset/data.zip`) y, si existe, un conjunto auxiliar (`dataset/set.zip`); después `merge_datasets` los une, con una partición al azar (semilla 42) que en el cuaderno final fue 90 % entrenamiento y 10 % validación, no el 80/10/10 que escribió la memoria. El `test` solo se copia si el conjunto auxiliar lo trae. El pipeline completo, desde el video hasta el peso que carga mai-core, cabe en este diagrama:
 
@@ -2699,17 +2699,17 @@ El oficio era el de siempre en detección: abrir una imagen, elegir el nombre de
 
 ![Interfaz de Label Studio con una foto de una integrante y las etiquetas de clase del proyecto Federico Object Recognition Model](assets/fig-vi-label-studio-etiquetado.jpeg)
 
-*Figura VI-2. Etiquetado en Label Studio: el recuadro se dibuja a mano y la clase es un nombre del semillero. Fuente: memoria académica 2026.*
+*Figura 4. Etiquetado en Label Studio: el recuadro se dibuja a mano y la clase es un nombre del semillero. Fuente: memoria académica 2026.*
 
 El mismo criterio se aplicó a fotos de grupo y a planos más abiertos. Las dos figuras siguientes son ejemplos de esas otras imágenes, ya anotadas: no todas las muestras son un retrato centrado.
 
 ![Imagen de entrenamiento con recuadros y nombres de integrantes](assets/fig-vi-etiqueta-ejemplo-1.png)
 
-*Figura VI-3. Ejemplo de etiquetado sobre una escena con más de una persona. Fuente: memoria académica 2026.*
+*Figura 5. Ejemplo de etiquetado sobre una escena con más de una persona. Fuente: memoria académica 2026.*
 
 ![Otra imagen de entrenamiento con recuadros de rostros del semillero](assets/fig-vi-etiqueta-ejemplo-2.png)
 
-*Figura VI-4. Segundo ejemplo de etiquetado; el recuadro cubre la cara, no el cuerpo entero. Fuente: memoria académica 2026.*
+*Figura 6. Segundo ejemplo de etiquetado; el recuadro cubre la cara, no el cuerpo entero. Fuente: memoria académica 2026.*
 
 Al terminar, el conjunto se exportó en formato YOLO (imágenes más un `.txt` por foto, con clase y coordenadas normalizadas). Las exportaciones que quedan en `pmai-model-vision/mydata/export` cuentan la historia en tres momentos: el proyecto 3, de septiembre de 2025, con 44 tareas y 8 clases; el proyecto 4, entre octubre y noviembre de 2025, con 52 a 174 tareas y 7 a 9 clases; y el mismo proyecto 4, el 1 de mayo de 2026, con 798 tareas y las 25 clases actuales. Esa última cifra no coincide del todo con las 802 imágenes de la memoria; la discrepancia se discute en la sección siguiente.
 
@@ -2753,7 +2753,7 @@ La gráfica de etiquetas que produjo Ultralytics sobre el conjunto de entrenamie
 
 ![Distribución de etiquetas por integrante en el conjunto de entrenamiento, recuadros superpuestos y dispersión de posición y tamaño](assets/fig-vi-yolo-etiquetas.png)
 
-*Figura VI-5. Distribución de instancias por clase en entrenamiento y geometría de los recuadros. Fuente: memoria académica 2026.*
+*Figura 7. Distribución de instancias por clase en entrenamiento y geometría de los recuadros. Fuente: memoria académica 2026.*
 
 La memoria dijo, además, que el conjunto se partió 80 % / 10 % / 10 % en entrenamiento, validación y prueba. El cuaderno vigente no hace eso: parte el material propio 90/10 y solo conserva un `test` si `set.zip` lo trae. Pendiente de confirmar: el contenido de `set.zip`, que no está en el repositorio, y el número exacto de imágenes por partición del entrenamiento final, porque no se conserva la carpeta `data_preprocessed`. Pendiente de confirmar, también, las 802 imágenes frente a las 798 tareas de la última exportación.
 
@@ -2794,45 +2794,45 @@ Las curvas de la corrida, conservadas de la ilustración 76 de la memoria (la 77
 
 ![Diez paneles de pérdidas y métricas de train5 a lo largo de 60 épocas](assets/fig-vi-yolo-resultados.png)
 
-*Figura VI-6. Pérdidas de entrenamiento y validación, precisión, recall, mAP50 y mAP50-95 de la corrida train5. Fuente: memoria académica 2026.*
+*Figura 8. Pérdidas de entrenamiento y validación, precisión, recall, mAP50 y mAP50-95 de la corrida train5. Fuente: memoria académica 2026.*
 
 ![Curva de precisión del detector frente al umbral de confianza](assets/fig-vi-yolo-curva-precision.png)
 
-*Figura VI-7. Precisión por umbral de confianza. Fuente: memoria académica 2026.*
+*Figura 9. Precisión por umbral de confianza. Fuente: memoria académica 2026.*
 
 ![Curva de recall del detector frente al umbral de confianza](assets/fig-vi-yolo-curva-recall.png)
 
-*Figura VI-8. Recall por umbral de confianza. Fuente: memoria académica 2026.*
+*Figura 10. Recall por umbral de confianza. Fuente: memoria académica 2026.*
 
 ![Curva precisión-recall del detector](assets/fig-vi-yolo-curva-pr.png)
 
-*Figura VI-9. Curva precisión-recall; el área bajo la curva es el mAP50. Fuente: memoria académica 2026.*
+*Figura 11. Curva precisión-recall; el área bajo la curva es el mAP50. Fuente: memoria académica 2026.*
 
 ![Curva F1 del detector frente al umbral de confianza](assets/fig-vi-yolo-curva-f1.png)
 
-*Figura VI-10. F1 por umbral; el pico indica el compromiso entre precisión y recall. Fuente: memoria académica 2026.*
+*Figura 12. F1 por umbral; el pico indica el compromiso entre precisión y recall. Fuente: memoria académica 2026.*
 
 La matriz de confusión normalizada enseña dónde se equivoca. La diagonal está cerca de 1,0 en las clases con muchas muestras (Alison Segura, Andrea Lopez, Johel Arias). Las clases pobres se derraman: Cristhian Tapiero se confunde a menudo, Valery Guerrero se mezcla con el fondo y con otras, y Breiner Bonilla casi no aparece, coherente con su ausencia en validación. El fondo (*background*) también se come recuadros: el modelo a veces "ve" a alguien donde no hay integrante.
 
 ![Matriz de confusión normalizada de las 25 clases más el fondo](assets/fig-vi-yolo-matriz-confusion.png)
 
-*Figura VI-11. Matriz de confusión normalizada: las clases con pocos ejemplos se confunden entre sí y con el fondo. Fuente: memoria académica 2026.*
+*Figura 13. Matriz de confusión normalizada: las clases con pocos ejemplos se confunden entre sí y con el fondo. Fuente: memoria académica 2026.*
 
 Sobre imágenes de validación el resultado es cualitativo y más fácil de leer. El mosaico siguiente es el que produjo la celda 23 del cuaderno (`conf=0.25`) sobre `validation/images`: retratos de Andrea Lopez, un grupo en el stand de la Universidad Libre, Johel Arias junto al robot. Los recuadros caen en las caras y los nombres coinciden con las personas, con algún solape en las fotos de grupo.
 
 ![Mosaico de predicciones sobre el conjunto de validación, con recuadros y nombres de integrantes](assets/fig-vi-yolo-validacion.png)
 
-*Figura VI-12. Predicciones de validación: el recuadro es la cara y la etiqueta es el nombre. Fuente: memoria académica 2026.*
+*Figura 14. Predicciones de validación: el recuadro es la cara y la etiqueta es el nombre. Fuente: memoria académica 2026.*
 
 Las dos fotos de feria, conservadas del mismo bloque de la memoria, muestran el detector en el entorno para el que se pensó: un grupo del semillero frente al stand y el androide al lado de un integrante. En la de grupo los recuadros se amontonan y las confianzas varían (Anyi Becerra a 0,99, otros por debajo de 0,70). En la del robot, el modelo nombra a la persona y no al cuerpo de InMoov, que no es una clase.
 
 ![Foto de grupo del semillero en un stand de la Universidad Libre, con recuadros y confianzas del detector](assets/fig-vi-yolo-deteccion-grupo.png)
 
-*Figura VI-13. Detección en una foto de grupo; cada recuadro es un integrante, no una persona genérica. Fuente: memoria académica 2026.*
+*Figura 15. Detección en una foto de grupo; cada recuadro es un integrante, no una persona genérica. Fuente: memoria académica 2026.*
 
 ![Integrante del semillero junto al androide, con el recuadro del detector sobre la cara](assets/fig-vi-yolo-deteccion-robot.png)
 
-*Figura VI-14. Detección junto al robot: la clase es el integrante, no el androide. Fuente: memoria académica 2026.*
+*Figura 16. Detección junto al robot: la clase es el integrante, no el androide. Fuente: memoria académica 2026.*
 
 #### 29.7 Despliegue en mai-core
 
@@ -2844,7 +2844,7 @@ La figura que la memoria tituló "visión artificial integrada dentro de R-One" 
 
 ![Diagrama de la visión artificial integrada en R-ONE, del peso entrenado al recuadro en pantalla](assets/fig-vi-vision-en-r-one.png)
 
-*Figura VI-15. El detector en el pipeline de mai-core: detección, seguimiento, reidentificación y visualización. Fuente: memoria académica 2026.*
+*Figura 17. El detector en el pipeline de mai-core: detección, seguimiento, reidentificación y visualización. Fuente: memoria académica 2026.*
 
 Tres advertencias cierran el despliegue. La primera, ya dicha: el preprocesado de entrenamiento no se aplica en inferencia. La segunda: el umbral 0,5 del núcleo es más severo que el 0,25 con el que se miraron las figuras de validación, así que en el robot se ven menos recuadros, no más. La tercera: alguien que no esté entre las 25 clases no tiene etiqueta propia; el turno lo tratará como `Persona no identificada` si el detector no dispara, o lo saludará con el nombre de otro integrante si dispara mal.
 
@@ -2864,7 +2864,7 @@ La fase de pruebas no fue un *benchmark* académico con COCO. Fue un diccionario
 
 ![Barras de tiempo de inferencia, velocidad, memoria, CPU y una métrica de modelo para seis pruebas de captioning](assets/fig-vi-blip-metricas.png)
 
-*Figura VI-16. Métricas de las pruebas de captioning: tiempo, velocidad, memoria y CPU por caso. Fuente: memoria académica 2026.*
+*Figura 18. Métricas de las pruebas de captioning: tiempo, velocidad, memoria y CPU por caso. Fuente: memoria académica 2026.*
 
 Tres modelos se documentaron a mano.
 
@@ -2878,7 +2878,7 @@ El resumen del caso `test1` sobre Salesforce, conservado de la ilustración 99, 
 
 ![Resumen de evaluación del caso test1: tiempo 0,59 s, velocidad 1,71 por segundo, memoria 0,58 GB, CPU 99,61 % y score 44,51](assets/fig-vi-blip-resumen-test1.png)
 
-*Figura VI-17. Resumen del caso de prueba 1 sobre BLIP-base. Fuente: memoria académica 2026.*
+*Figura 19. Resumen del caso de prueba 1 sobre BLIP-base. Fuente: memoria académica 2026.*
 
 Los parámetros con los que la memoria dijo haber cerrado Salesforce fueron `max_length=50`, `min_length=15`, `num_beams=1`, `repetition_penalty=1.3`, `early_stopping=False`, `length_penalty=2.0` y `no_repeat_ngram_size=2`. El código de noviembre de 2026 no usa esa terna. `generate_context` en `pmai-model-context/model_context/context.py` genera con `max_length=88`, `min_length=18`, `num_beams=10`, `repetition_penalty=1.4`, `early_stopping=True`, `length_penalty=1.05` y `no_repeat_ngram_size=3`, sin texto guía. Dicho de otro modo, hoy se exploran más haces y se piden frases un poco más largas. Geospace se descartó; Salesforce se quedó y se le cambiaron los mandos.
 
@@ -2892,17 +2892,17 @@ El ejemplo que la memoria eligió para enseñar una inferencia es un gato. La en
 
 ![Fotografía de un gato usada como entrada de captioning](assets/fig-vi-blip-entrada-gato.png)
 
-*Figura VI-18. Imagen de prueba para el caption: un gato. Fuente: memoria académica 2026.*
+*Figura 20. Imagen de prueba para el caption: un gato. Fuente: memoria académica 2026.*
 
 ![Salida generada por BLIP para la foto del gato](assets/fig-vi-blip-salida-gato.png)
 
-*Figura VI-19. Descripción generada a partir de la figura anterior. Fuente: memoria académica 2026.*
+*Figura 21. Descripción generada a partir de la figura anterior. Fuente: memoria académica 2026.*
 
 El lote completo se imprimió cuadro a cuadro y se volcó a JSON para comparar. La figura conservada de esa impresión muestra el ritmo de trabajo de la fase: una frase por imagen, con los parámetros ya fijados, todavía sin el filtro de alucinaciones de la sección siguiente.
 
 ![Listado de descripciones generadas por BLIP sobre un lote de imágenes de prueba](assets/fig-vi-blip-resultados-lote.png)
 
-*Figura VI-20. Resultados descriptivos impresos por frame en la fase de desarrollo. Fuente: memoria académica 2026.*
+*Figura 22. Resultados descriptivos impresos por frame en la fase de desarrollo. Fuente: memoria académica 2026.*
 
 #### 30.4 Alucinaciones y palabras protegidas
 
@@ -2912,19 +2912,19 @@ Las **palabras omitidas** son `SUSPICIOUS_WORDS`: adverbios de duda (`likely`, `
 
 ![Conjunto SUSPICIOUS_WORDS con las palabras que el filtro omite de la descripción](assets/fig-vi-blip-palabras-sospechosas.png)
 
-*Figura VI-21. Palabras omitidas en la inferencia (`SUSPICIOUS_WORDS`). Fuente: memoria académica 2026.*
+*Figura 23. Palabras omitidas en la inferencia (`SUSPICIOUS_WORDS`). Fuente: memoria académica 2026.*
 
 Los **patrones de alucinación** (`HALLUCINATION_PATTERNS`) son expresiones regulares: palabra de cuatro letras o más repetida, "a man" o "a woman" duplicado, verbos copulativos dobles, fechas con mes y año, cualquier año 19xx o 20xx, texto citado después de `says`/`reads`, comillas tipográficas repetidas, ciudades tras `in`, `nasa…` y `mascot`/`robot`/`people` repetidos. Si el trozo coincidente contiene una palabra protegida, no se borra.
 
 ![Lista HALLUCINATION_PATTERNS con las expresiones regulares que limpian la frase](assets/fig-vi-blip-patrones-alucinacion.png)
 
-*Figura VI-22. Patrones de alucinación aplicados después del filtro de palabras. Fuente: memoria académica 2026.*
+*Figura 24. Patrones de alucinación aplicados después del filtro de palabras. Fuente: memoria académica 2026.*
 
 Las **palabras protegidas** (`PROTECTED_WORDS`) no se tocan: `robot`, personas (`man`, `woman`, `child`, `niño`, `niña`…), animales, objetos de escena (`table`, `chair`, `laptop`, `camera`), colores, tamaños y acciones (`standing`, `sitting`, `walking`, `holding`, `wearing`, `looking`, `working`). Sin esa lista, el filtro se comería exactamente lo que el turno necesita saber.
 
 ![Conjunto PROTECTED_WORDS con robot, personas, colores, tamaños y acciones que el filtro no borra](assets/fig-vi-blip-palabras-protegidas.png)
 
-*Figura VI-23. Palabras protegidas del modelo contextual. Fuente: memoria académica 2026.*
+*Figura 25. Palabras protegidas del modelo contextual. Fuente: memoria académica 2026.*
 
 El filtro no es perfecto. Las entradas de `SUSPICIOUS_WORDS` con espacios nunca coinciden, porque la comparación es palabra a palabra. Falta una coma entre `"how do i' m"` y `"crochel"`, así que Python concatena las cadenas y `crochel` no se filtra como palabra suelta. El patrón de años borra cualquier 19xx o 20xx, aunque esté de verdad en un cartel. Aun así, la frase que llega al modelo de lenguaje es más corta y menos fantasiosa que la cruda de BLIP.
 
@@ -2932,7 +2932,7 @@ La prueba con imágenes reales, conservada de la ilustración 113, cierra el arc
 
 ![Inferencia de BLIP sobre una foto real del stand universitario, con la mascota toro y el androide](assets/fig-vi-blip-inferencia-real.png)
 
-*Figura VI-24. Inferencia con una imagen real del stand; la frase describe al hombre y al toro, no al robot. Fuente: memoria académica 2026.*
+*Figura 26. Inferencia con una imagen real del stand; la frase describe al hombre y al toro, no al robot. Fuente: memoria académica 2026.*
 
 Hoy, en resumen, `pmai-model-context` carga `Salesforce/blip-image-captioning-base` en CPU, genera con diez haces y limpia con `clean_caption`. La cuantización dinámica a `qint8` existe y el turno no la usa. El paquete se llama `model_context` y no `utils`; esa decisión se cuenta en la [sección 32](#32-la-primera-interfaz-y-las-decisiones-descartadas).
 
@@ -2944,7 +2944,7 @@ El modelo de acción es el que, con la persona, la frase de BLIP, la pregunta y 
 
 ![Arquitectura de R-ONE: sistema de respuesta inteligente con caché vectorial y RAG](assets/high-level-action-model.jpeg)
 
-*Figura VI-24b. Arquitectura del modelo de acción: pregunta y escena a la izquierda, caché vectorial en el centro, texto y movimientos a la derecha. Fuente: semillero Prometeo.*
+*Figura 27. Arquitectura del modelo de acción: pregunta y escena a la izquierda, caché vectorial en el centro, texto y movimientos a la derecha. Fuente: semillero Prometeo.*
 
 La idea de aquel dibujo sigue siendo la del código. A la izquierda entran la pregunta, el objeto de escena y las acciones disponibles. En el centro, un encoder convierte la pregunta en un vector, se busca en la memoria y, si no hay acierto, se llama a un modelo de lenguaje. A la derecha salen el texto y los movimientos. Abajo, un proceso externo de ingesta alimenta la base. El "HIT" evita al LLM; el "MISS" lo enciende y, si la respuesta es almacenable, la escribe para la próxima vez. Eso es, con otros nombres, `responder()` de `pmai-model-vision-language/utils/main.py`. La ficha del paquete está en [17. pmai-model-vision-language](#17-pmai-model-vision-language); la de la base, en [7.2 Milvus Lite](#72-milvus-lite).
 
@@ -2952,7 +2952,7 @@ Lo que el análisis de 2026 todavía mezclaba, y el código ya no, es el postpro
 
 ![Diagrama de postprocesado de la respuesta, con filtro de palabras y bifurcación a texto y movimientos](assets/fig-vi-accion-postprocesamiento.png)
 
-*Figura VI-25. Etapa de postprocesamiento según la memoria: el filtro de alucinaciones se dibujó aquí y hoy vive en el modelo contextual. Fuente: memoria académica 2026.*
+*Figura 28. Etapa de postprocesamiento según la memoria: el filtro de alucinaciones se dibujó aquí y hoy vive en el modelo contextual. Fuente: memoria académica 2026.*
 
 #### 31.2 Ingesta por web scraping
 
@@ -2966,7 +2966,7 @@ El diagrama de ingesta externa de la memoria (ilustración 117) dibuja el pipeli
 
 ![Diagrama del proceso externo de ingesta, de la captura de datos al almacenamiento de vectores](assets/fig-vi-accion-ingesta-externa.png)
 
-*Figura VI-26. Proceso externo de ingesta según la memoria; el código vigente siembra pares curados, no un pipeline de chunks en caliente. Fuente: memoria académica 2026.*
+*Figura 29. Proceso externo de ingesta según la memoria; el código vigente siembra pares curados, no un pipeline de chunks en caliente. Fuente: memoria académica 2026.*
 
 #### 31.3 Búsqueda semántica y caché
 
@@ -2978,7 +2978,7 @@ La ilustración 123 de la memoria, de la que se conserva un recorte, es un diagr
 
 ![Diagrama de secuencia de responder, con búsqueda en conocimiento, interacciones y respaldo a un LLM](assets/fig-vi-accion-secuencia-original.png)
 
-*Figura VI-27. Gestión de solicitudes a la base vectorial según un dibujo original; el LLM del recuadro es Ollama, ya descartado. Fuente: memoria académica 2026.*
+*Figura 30. Gestión de solicitudes a la base vectorial según un dibujo original; el LLM del recuadro es Ollama, ya descartado. Fuente: memoria académica 2026.*
 
 #### 31.4 Ingeniería del prompt
 
@@ -3018,7 +3018,7 @@ El **catálogo fijo de gestos 1–34** se sustituyó por el catálogo vivo de `g
 
 El paquete de contexto se llamaba **`utils`**. Se renombró a `model_context` el 9 de octubre de 2026 porque mai-core carga en el mismo proceso las dos bibliotecas, y `pmai-model-vision-language` ya exporta `utils`. Con las dos rutas en `PYTHONPATH`, un `utils` tapaba al otro. Volver al nombre viejo rompería el turno.
 
-**Ollama** (y, en el dibujo de la figura VI-27, `llama3.2:1b`) fue el LLM local de la primera versión. El cliente está roto: importa `OLLAMA_MODEL`, que ya no existe, y valida ids 1–34. El local de hoy es Gemma 4 E2B en GGUF, con `llama-cpp-python`. LangChain aparece en el README de contexto y en las dependencias de acción; el turno no lo llama.
+**Ollama** (y, en el dibujo de la figura 30, `llama3.2:1b`) fue el LLM local de la primera versión. El cliente está roto: importa `OLLAMA_MODEL`, que ya no existe, y valida ids 1–34. El local de hoy es Gemma 4 E2B en GGUF, con `llama-cpp-python`. LangChain aparece en el README de contexto y en las dependencias de acción; el turno no lo llama.
 
 **Geospace** (`gospacedev/blip-image-captioning-base-bf16`) describía un poco mejor y tardaba el doble. Se eligió Salesforce por latencia. MiniLLaVA, el VLM del hito 4, no se integró: una frase de BLIP más un LLM resultó más barato de correr en el miniPC que un visión-lenguaje de verdad.
 
@@ -3510,42 +3510,42 @@ El WebSocket acepta `setSelection` y `setQuality`. Si el token no vale, cierra c
 
 ### Anexo E. Índice de figuras y diagramas
 
-Los números se dejan tal cual aparecen en el documento; la Task 15 los renumerará. Hay **30** figuras (pies `*Figura …*`) y **19** bloques Mermaid, los mismos que produce `rg` sobre `docs/project-docs/r-one-documentacion-integral.md`.
+Hay **30** figuras, numeradas de corrido en todo el documento, y **19** bloques Mermaid.
 
 #### Figuras
 
 | Número | Pie | Sección |
 |---|---|---|
 | 1 | Arquitectura de alto nivel: la web habla con el gateway y este con cuatro microservicios por NATS | [2](#2-el-sistema-en-una-página) |
-| VI-0 | Plan de arranque: ocho hitos, no nueve; el recuadro «Flujo real» desglosa el hito 3 | [28](#28-stakeholders-e-hitos) |
-| VI-1 | Fotogramas extraídos a un cuadro por segundo | [29.1](#291-captura-y-extracción-de-imágenes) |
-| VI-2 | Etiquetado en Label Studio: el recuadro se dibuja a mano y la clase es un nombre del semillero | [29.2](#292-etiquetado-en-label-studio) |
-| VI-3 | Ejemplo de etiquetado sobre una escena con más de una persona | [29.2](#292-etiquetado-en-label-studio) |
-| VI-4 | Segundo ejemplo; el recuadro cubre la cara, no el cuerpo entero | [29.2](#292-etiquetado-en-label-studio) |
-| VI-5 | Distribución de instancias por clase y geometría de los recuadros | [29.3](#293-análisis-del-dataset) |
-| VI-6 | Pérdidas, precisión, recall, mAP50 y mAP50-95 de la corrida train5 | [29.6](#296-resultados) |
-| VI-7 | Precisión por umbral de confianza | [29.6](#296-resultados) |
-| VI-8 | Recall por umbral de confianza | [29.6](#296-resultados) |
-| VI-9 | Curva precisión-recall; el área es el mAP50 | [29.6](#296-resultados) |
-| VI-10 | F1 por umbral | [29.6](#296-resultados) |
-| VI-11 | Matriz de confusión normalizada | [29.6](#296-resultados) |
-| VI-12 | Predicciones de validación: el recuadro es la cara y la etiqueta es el nombre | [29.6](#296-resultados) |
-| VI-13 | Detección en una foto de grupo | [29.6](#296-resultados) |
-| VI-14 | Detección junto al robot: la clase es el integrante, no el androide | [29.6](#296-resultados) |
-| VI-15 | El detector en el pipeline de mai-core | [29.7](#297-despliegue-en-mai-core) |
-| VI-16 | Métricas de las pruebas de captioning | [30.2](#302-pruebas-de-blip-base-y-geospace) |
-| VI-17 | Resumen del caso de prueba 1 sobre BLIP-base | [30.2](#302-pruebas-de-blip-base-y-geospace) |
-| VI-18 | Imagen de prueba para el caption: un gato | [30.3](#303-optimización-e-inferencia) |
-| VI-19 | Descripción generada a partir de la figura anterior | [30.3](#303-optimización-e-inferencia) |
-| VI-20 | Resultados descriptivos impresos por frame | [30.3](#303-optimización-e-inferencia) |
-| VI-21 | Palabras omitidas en la inferencia | [30.4](#304-alucinaciones-y-palabras-protegidas) |
-| VI-22 | Patrones de alucinación aplicados después del filtro | [30.4](#304-alucinaciones-y-palabras-protegidas) |
-| VI-23 | Palabras protegidas del modelo contextual | [30.4](#304-alucinaciones-y-palabras-protegidas) |
-| VI-24 | Inferencia con una imagen real del stand | [30.4](#304-alucinaciones-y-palabras-protegidas) |
-| VI-24b | Arquitectura del modelo de acción: pregunta, caché y gestos | [31.1](#311-fase-de-análisis) |
-| VI-25 | Postprocesamiento según la memoria; el filtro vive hoy en el modelo contextual | [31.1](#311-fase-de-análisis) |
-| VI-26 | Ingesta según la memoria; el código vigente siembra pares curados | [31.2](#312-ingesta-por-web-scraping) |
-| VI-27 | Gestión de solicitudes a la base vectorial; el LLM del recuadro es Ollama, ya descartado | [31.3](#313-búsqueda-semántica-y-caché) |
+| 2 | Plan de arranque: ocho hitos, no nueve; el recuadro «Flujo real» desglosa el hito 3 | [28](#28-stakeholders-e-hitos) |
+| 3 | Fotogramas extraídos a un cuadro por segundo | [29.1](#291-captura-y-extracción-de-imágenes) |
+| 4 | Etiquetado en Label Studio: el recuadro se dibuja a mano y la clase es un nombre del semillero | [29.2](#292-etiquetado-en-label-studio) |
+| 5 | Ejemplo de etiquetado sobre una escena con más de una persona | [29.2](#292-etiquetado-en-label-studio) |
+| 6 | Segundo ejemplo; el recuadro cubre la cara, no el cuerpo entero | [29.2](#292-etiquetado-en-label-studio) |
+| 7 | Distribución de instancias por clase y geometría de los recuadros | [29.3](#293-análisis-del-dataset) |
+| 8 | Pérdidas, precisión, recall, mAP50 y mAP50-95 de la corrida train5 | [29.6](#296-resultados) |
+| 9 | Precisión por umbral de confianza | [29.6](#296-resultados) |
+| 10 | Recall por umbral de confianza | [29.6](#296-resultados) |
+| 11 | Curva precisión-recall; el área es el mAP50 | [29.6](#296-resultados) |
+| 12 | F1 por umbral | [29.6](#296-resultados) |
+| 13 | Matriz de confusión normalizada | [29.6](#296-resultados) |
+| 14 | Predicciones de validación: el recuadro es la cara y la etiqueta es el nombre | [29.6](#296-resultados) |
+| 15 | Detección en una foto de grupo | [29.6](#296-resultados) |
+| 16 | Detección junto al robot: la clase es el integrante, no el androide | [29.6](#296-resultados) |
+| 17 | El detector en el pipeline de mai-core | [29.7](#297-despliegue-en-mai-core) |
+| 18 | Métricas de las pruebas de captioning | [30.2](#302-pruebas-de-blip-base-y-geospace) |
+| 19 | Resumen del caso de prueba 1 sobre BLIP-base | [30.2](#302-pruebas-de-blip-base-y-geospace) |
+| 20 | Imagen de prueba para el caption: un gato | [30.3](#303-optimización-e-inferencia) |
+| 21 | Descripción generada a partir de la figura anterior | [30.3](#303-optimización-e-inferencia) |
+| 22 | Resultados descriptivos impresos por frame | [30.3](#303-optimización-e-inferencia) |
+| 23 | Palabras omitidas en la inferencia | [30.4](#304-alucinaciones-y-palabras-protegidas) |
+| 24 | Patrones de alucinación aplicados después del filtro | [30.4](#304-alucinaciones-y-palabras-protegidas) |
+| 25 | Palabras protegidas del modelo contextual | [30.4](#304-alucinaciones-y-palabras-protegidas) |
+| 26 | Inferencia con una imagen real del stand | [30.4](#304-alucinaciones-y-palabras-protegidas) |
+| 27 | Arquitectura del modelo de acción: pregunta, caché y gestos | [31.1](#311-fase-de-análisis) |
+| 28 | Postprocesamiento según la memoria; el filtro vive hoy en el modelo contextual | [31.1](#311-fase-de-análisis) |
+| 29 | Ingesta según la memoria; el código vigente siembra pares curados | [31.2](#312-ingesta-por-web-scraping) |
+| 30 | Gestión de solicitudes a la base vectorial; el LLM del recuadro es Ollama, ya descartado | [31.3](#313-búsqueda-semántica-y-caché) |
 
 #### Diagramas Mermaid
 

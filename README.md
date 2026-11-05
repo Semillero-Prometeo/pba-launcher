@@ -1,3 +1,5 @@
+> Documentación completa del proyecto: [docs/project-docs/r-one-documentacion-integral.md](docs/project-docs/r-one-documentacion-integral.md). Si algo falla al arrancar, ve a [Solución de problemas](docs/project-docs/r-one-documentacion-integral.md#24-solución-de-problemas).
+
 ## ⚙️ Configuración Inicial
 
 ### 1. Configurar Submódulos
