@@ -330,73 +330,527 @@ En R-ONE: las secuencias viven en `pba-ms-robotics/data/sequences`, la cola de e
 
 ## Parte II. Arquitectura y flujos
 
-<!-- pendiente: tarea 9 -->
+> Esta parte es para desarrolladores y para operadores que quieran entender qué pasa por dentro. Supone que se leyeron los conceptos de la [sección 4](#4-conceptos-clave). Primero muestra el mapa de servicios, luego recorre cada flujo con un diagrama de secuencia que usa los nombres reales de los mensajes y, por último, describe dónde se guarda cada dato. Las fichas de la [Parte III](#parte-iii-repositorios) bajan al detalle de cada repositorio.
 
 ### 5. Mapa de servicios
 
 #### 5.1 Servicios y puertos
 
-<!-- pendiente: tarea 9 -->
+Todo R-ONE se levanta con un único archivo de Docker Compose, `docker-compose.yml`, en la raíz del lanzador. Define nueve servicios: siete son repositorios del semillero y dos son piezas de infraestructura tomadas tal cual (Postgres y NATS). Los puertos salen de `.env.template`, y conviene no cambiarlos porque la web tiene fijos el 3000 y el 4210 (ver la [ficha 10](#10-pmas-web-main)).
+
+| Servicio de Compose | Repositorio | Tecnología | Puerto publicado | Depuración | Depende de |
+|---|---|---|---|---|---|
+| `db` | imagen `postgres:17.1-alpine` | PostgreSQL 17 | 5432 | — | — |
+| `nats-server` | imagen `nats:2.12.5-alpine3.22` | NATS | 8222 (monitor) | — | — |
+| `pba-ms-gateway` | `pba-ms-gateway` | NestJS | 3000 (`MS_GATEWAY_PORT`) | 9230 | `db` sano, `nats-server` |
+| `pba-ms-auth` | `pba-ms-auth` | NestJS | 3001 (`MS_AUTH_PORT`), sin servidor HTTP | 9231 | `db` sano, `nats-server` |
+| `pba-ms-management` | `pba-ms-management` | NestJS | 3002 (`MS_MANAGEMENT_PORT`), sin servidor HTTP | 9232 | — |
+| `pba-ms-robotics` | `pba-ms-robotics` | Python, FastAPI y Uvicorn | 3003 (`MS_ROBOTICS_PORT`), sin rutas de negocio | 9233 | — |
+| `pmas-web-main` | `pmas-web-main` | Angular | 4200 (`WEB_MAIN_PORT`) | — | — |
+| `pmas-web-motion-studio` | `pmas-web-motion-studio` | Python, FastAPI | 4210 (`MOTION_STUDIO_PORT`) | — | — |
+| `pmai-core` | `pmai-mai-core` (con `pmai-model-context` y `pmai-model-vision-language` montados) | Python 3.12 | 3004 (`PMAI_CORE_PORT`), sin servidor | — | `nats-server` |
+
+La tabla tiene varias rarezas que conviene explicar, porque desconciertan a quien llega. Tres servicios publican un puerto en el que nadie escucha: auth y management son microservicios NestJS que solo atienden NATS, y el núcleo no abre ningún servidor. Esos puertos quedaron de una versión anterior y no hacen daño, pero tampoco sirven para nada. Robótica, en cambio, sí arranca un servidor web con Uvicorn, aunque no monta ninguna ruta de negocio; todo su trabajo entra por NATS. En la práctica, los únicos puertos que un navegador usa son el 4200 (la web), el 3000 (el gateway) y el 4210 (el estudio).
+
+El puerto de clientes de NATS, el 4222, no se publica en el anfitrión: solo existe dentro de la red privada de Docker, donde cada servicio lo encuentra como `nats://nats-server:4222`. Esto tiene una consecuencia de seguridad positiva, porque desde la red local nadie puede enviar mensajes directamente a robótica o al núcleo saltándose el gateway.
+
+Por último, solo el gateway y auth declaran dependencias en Compose. El orden en que arranca el resto lo impone el script `scripts/lan-up.sh`, que se describe en la [sección 22](#22-arranque-local-y-en-red-local).
 
 #### 5.2 Canales de comunicación
 
-<!-- pendiente: tarea 9 -->
+El diagrama muestra cada canal real entre servicios, con el protocolo en la flecha.
+
+```mermaid
+flowchart LR
+  NAV["Navegador"]
+  WEB["pmas-web-main :4200"]
+  STU["pmas-web-motion-studio :4210"]
+  GW["pba-ms-gateway :3000"]
+  NATS[("nats-server :4222")]
+  AUTH["pba-ms-auth"]
+  MGMT["pba-ms-management"]
+  ROB["pba-ms-robotics"]
+  CORE["pmai-core"]
+  PG[("Postgres :5432")]
+  OAI["API de OpenAI"]
+  HF["Hugging Face"]
+  ARD["Arduino Mega"]
+  SPK["PulseAudio del anfitrión"]
+  NAV -->|"HTTP"| WEB
+  NAV -->|"HTTP e iframe"| STU
+  NAV -->|"HTTP REST"| GW
+  NAV -->|"WebSocket /vision/ws"| GW
+  WEB -.->|"postMessage con token"| STU
+  GW -->|"NATS"| NATS
+  NATS -->|"NATS"| AUTH
+  NATS -->|"NATS"| MGMT
+  NATS -->|"NATS"| ROB
+  NATS <-->|"NATS"| CORE
+  AUTH -->|"SQL"| PG
+  GW -->|"SQL, solo sesiones"| PG
+  MGMT -->|"HTTPS"| OAI
+  CORE -->|"HTTPS"| OAI
+  ROB -->|"HTTPS, voz"| OAI
+  CORE -->|"descarga de modelos"| HF
+  ROB -->|"serie USB 115200"| ARD
+  ROB -->|"socket Pulse"| SPK
+```
+
+El navegador habla con tres servidores. Carga la aplicación Angular desde el 4200, carga el estudio desde el 4210 dentro de un `iframe` y hace todas las peticiones de datos al gateway en el 3000, por HTTP para lo normal y por WebSocket para el video. El estudio no inicia sesión por su cuenta: la web le pasa el token con `postMessage` (mensajes `prometeo-auth` y `prometeo-auth-request`) y, desde ahí, el estudio llama al mismo gateway.
+
+Detrás del gateway todo es NATS. Gateway, auth y management son NestJS y usan el transporte NATS de NestJS tal cual. Robótica y el núcleo son Python y no tienen NestJS, así que reproducen a mano el formato de sobre que NestJS espera. Cuando el gateway envía `ROBOTICS_MS.voiceService.speak`, publica en ese sujeto un JSON `{ "pattern": "ROBOTICS_MS.voiceService.speak", "data": { "message": "Hola" }, "id": "…" }`. Robótica lo recibe en su suscriptor, llama al controlador con `data` y responde `{ "response": …, "isDisposed": true }`. La función que arma esas peticiones en Python es `nest_request` en `pba-ms-robotics/src/core/nats/nest_request.py`, y el núcleo tiene su equivalente en `pmai-mai-core/src/pmai_core/core/nats/nats_client.py`.
+
+Hay tres salidas a internet. Management y el núcleo llaman a OpenAI para generar texto, robótica la llama para sintetizar voz y el núcleo descarga de Hugging Face los modelos que no encuentra en disco. Las tres son opcionales: sin internet, el sistema responde con Gemma, habla con Piper o eSpeak y usa los modelos ya descargados.
+
+Hacia el mundo físico, robótica escribe en el puerto serie del Arduino (115200 baudios) y reproduce el audio a través del servidor PulseAudio del anfitrión, cuyo socket Compose monta dentro del contenedor. Por eso el parlante Bluetooth se empareja en el sistema operativo y no en Docker.
 
 ### 6. Flujos
 
 #### 6.1 Inicio de sesión
 
-<!-- pendiente: tarea 9 -->
+Iniciar sesión involucra a la web, al gateway, a auth y a Postgres. El gateway nunca guarda contraseñas: delega la validación en auth y, desde ese momento, en cada petición comprueba que la sesión siga viva.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as Usuario
+  participant W as pmas-web-main
+  participant G as pba-ms-gateway
+  participant A as pba-ms-auth
+  participant P as Postgres
+  U->>W: correo y contraseña
+  W->>G: POST /auth/login
+  G->>A: AUTH_MS.authService.validateUser
+  A->>P: busca usuario y compara bcrypt
+  A-->>G: usuario o null
+  G->>A: AUTH_MS.authService.login
+  A->>P: da de baja la sesión anterior y crea una nueva
+  A-->>G: accessToken firmado
+  G-->>W: accessToken
+  W->>G: GET /auth/me con Bearer y X-Active-Role
+  G->>A: findOneSession y usersService.findOne
+  G->>A: AUTH_MS.authService.getProfile
+  A-->>G: perfil con roles
+  G-->>W: perfil
+  W->>U: panel de control
+```
+
+El orden importa por dos razones. Primero, el gateway usa dos estrategias de Passport: `LocalStrategy` comprueba usuario y contraseña con `AUTH_MS.authService.validateUser`, y solo si pasa se pide el token a `AUTH_MS.authService.login`. Segundo, auth firma el JWT con una duración tomada del ajuste `SESSION_EXPIRATION` (8 horas en la siembra) y, al crear la sesión, da de baja la anterior del mismo usuario. Esa es la razón de que haya una sola sesión por cuenta: si dos personas comparten usuario, la que entró primero queda fuera.
+
+Después del login, cada petición protegida pasa por `JwtAuthGuard`, que valida la firma y además pregunta a auth si la sesión existe y sigue activa. Luego `RolesGuard` comprueba que el rol de la cabecera `X-Active-Role` esté asignado al usuario. Si un usuario tiene varios roles, la web le muestra un selector después del login.
+
+Los errores se ven así en la pantalla. Una contraseña errada da 401 y "Credenciales incorrectas."; demasiados intentos bloquean la cuenta durante `LOCK_LOGIN_UNTIL` horas (0,25 en la siembra, es decir, quince minutos) después de `LOCK_LOGIN_ATTEMPTS` fallos (5). Una sesión vencida o dada de baja da 401 y la web vuelve al login con "Tu sesión venció. Entra de nuevo.". Hay un matiz: la web cierra la sesión ante cualquier 401 o 403, incluido un 403 por falta de permisos, de modo que un USER que intenta una acción de ADMIN también termina en el login.
 
 #### 6.2 Chat por la ruta Básico
 
-<!-- pendiente: tarea 9 -->
+La ruta Básico es la más sencilla y no usa ni cámaras, ni memoria, ni gestos. Se activa cuando el operador apaga los turnos automáticos o elige el modelo "básico" en el selector del chat.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant W as Web o micrófono
+  participant G as pba-ms-gateway
+  participant M as pba-ms-management
+  participant O as OpenAI
+  participant R as pba-ms-robotics
+  W->>G: POST /chat/question con message
+  G->>M: MANAGEMENT_MS.chatService.chat
+  M->>M: lee data/chat-route.json
+  M->>O: chatStructured con esquema management_chat_reply
+  O-->>M: reply
+  M->>R: ROBOTICS_MS.voiceService.speak
+  R-->>M: spoken y sink, al terminar de sonar
+  M-->>G: reply, fuente OpenAI, movimientos vacíos
+  G-->>W: misma respuesta
+```
+
+La decisión de ruta es una sola línea de `pba-ms-management/src/chat/chat.service.ts`: `const useTurn = route.automationEnabled && route.selectedModel === 'complejo';`. Si es falsa, management llama a OpenAI pidiendo una respuesta estructurada (`chatStructured`), le pide a robótica que la diga y devuelve `{ reply, fuente: "OpenAI", movimientos: [] }`.
+
+Hay tres detalles que no se ven desde fuera. El primero es que management espera a que robótica termine de reproducir el audio antes de contestar, y esa espera tiene un límite de 20 segundos; una respuesta muy larga puede vencerlo aunque el robot siga hablando. El segundo es que esta ruta no tiene respaldo: si OpenAI falla, el chat muestra un error. El tercero es que el prompt de sistema que se envía es una constante del código; la variable `OPENAI_SYSTEM_PROMPT` es obligatoria al arrancar, pero nadie la lee (ver la [ficha 13](#13-pba-ms-management)).
 
 #### 6.3 Chat por la ruta Complejo: el turno
 
-<!-- pendiente: tarea 9 -->
+La ruta Complejo es el corazón del sistema y se llama **turno**. Se activa cuando los turnos automáticos están encendidos y el modelo elegido es "complejo", que es el valor por defecto.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant W as Web
+  participant G as pba-ms-gateway
+  participant M as pba-ms-management
+  participant C as pmai-core
+  participant B as BLIP
+  participant R as pba-ms-robotics
+  participant V as responder
+  W->>G: POST /chat/question
+  G->>M: MANAGEMENT_MS.chatService.chat
+  M->>C: MAI_CORE_MS.interactionService.ask
+  C->>C: toma el candado del turno
+  C->>C: elige persona de mayor confianza
+  C->>B: recorte JPEG calidad 85
+  B-->>C: descripción en inglés
+  C->>R: ROBOTICS_MS.actionService.getActions
+  R-->>C: catálogo de pares con id
+  C->>V: responder con objeto y catálogo
+  V-->>C: respuesta, movimientos, fuente y backend
+  par voz
+    C->>R: ROBOTICS_MS.voiceService.speak
+  and gestos en orden
+    C->>R: ROBOTICS_MS.actionService.executeAction por id
+  end
+  C-->>M: reply, fuente, movimientos
+  M-->>G: sin cambios
+  G-->>W: sin cambios
+```
+
+El turno lo implementa `InteractionTurn.ask` en `pmai-mai-core/src/pmai_core/pipeline/interaction_turn.py`, y conviene leerlo paso a paso.
+
+1. **Un turno a la vez.** Un candado no bloqueante impide que dos preguntas se mezclen. Si llega una segunda mientras la primera sigue en curso, la respuesta inmediata es "Sigo respondiendo, un momento." con `fuente: ocupado`.
+2. **Elegir a la persona.** De los objetos globales de la escena, gana el de mayor confianza; si hay empate, el de `id_global` menor en orden alfabético. Si no hay nadie, se usa la etiqueta `Persona no identificada`, sin recuadro ni imagen.
+3. **Describir la escena.** Si hay recuadro, se toma el último cuadro de la cámara que mejor ve a la persona, se recorta como JPEG de calidad 85 y se envía a BLIP. Si BLIP falla, el contexto queda vacío y el turno sigue.
+4. **Pedir el catálogo.** `ROBOTICS_MS.actionService.getActions` devuelve los pares completos y con descripción, cada uno con su `id`. Si la lista está vacía, el turno no falla: el robot hablará y no moverá nada.
+5. **Responder.** `responder()` busca en la memoria y, si no acierta, genera con OpenAI o Gemma (ver [4.7](#47-caché-semántico) y [4.8](#48-modelo-local-frente-a-modelo-en-la-nube)). Devuelve como máximo tres ids, y solo de ese catálogo.
+6. **Hablar y gesticular.** La voz se lanza en un hilo aparte y, mientras suena, el núcleo envía `executeAction` por cada id en el orden que eligió el modelo, sin esperas ni neutro: el neutro lo inserta robótica. Al final, el turno espera a que termine la voz y devuelve `{ reply, fuente, movimientos }`.
+
+La `fuente` le dice al operador de dónde salió la respuesta. El núcleo la traduce a partir de lo que devuelve `responder()`:
+
+| `fuente` | Cuándo aparece |
+|---|---|
+| `caché` | Milvus encontró la respuesta en `conocimiento` o `interacciones` |
+| `OpenAI` | No hubo acierto y respondió `gpt-4o-mini` |
+| `Gemma (local)` | No hubo acierto y respondió Gemma, porque no había clave o la llamada a OpenAI falló |
+| `ocupado` | Había otro turno en curso |
+| `voz corta` | La pregunta vino por voz y tenía menos de 14 caracteres |
+| `disculpa` | `responder()` lanzó una excepción o devolvió vacío; la respuesta es "Lo siento, no puedo responder en este momento." |
+
+```mermaid
+stateDiagram-v2
+  [*] --> Recibida
+  Recibida --> VozCorta: voz con menos de 14 caracteres
+  Recibida --> Ocupado: candado tomado
+  Recibida --> Escena: candado libre
+  Escena --> Catalogo
+  Catalogo --> Memoria
+  Memoria --> Cache: acierto en Milvus
+  Memoria --> Modelo: sin acierto
+  Modelo --> OpenAI: hay clave y la llamada responde
+  Modelo --> Gemma: sin clave o la llamada falla
+  Escena --> Disculpa: error en responder
+  VozCorta --> [*]
+  Ocupado --> [*]
+  Cache --> [*]
+  OpenAI --> [*]
+  Gemma --> [*]
+  Disculpa --> [*]
+```
+
+El código y la documentación anterior se separan en cuatro puntos que un desarrollador tiene que conocer:
+
+- **"Voz corta" y el "ocupado" hablado no ocurren hoy.** Esas dos ramas solo se activan cuando el origen del turno es `voice`, pero el controlador de NATS siempre llama `turn.ask(message, "chat")`, también cuando la pregunta vino del micrófono a través de management.
+- **Una disculpa de Gemma se ve como `Gemma (local)`.** Si Gemma no puede cargar, devuelve la frase de disculpa marcada como `gguf`. Además, esa frase no está en la lista de respuestas que no se guardan, así que puede quedar indexada en `interacciones` y repetirse desde la caché.
+- **El tiempo límite del gateway es de 20 segundos.** El gateway espera ese tiempo como máximo cualquier respuesta NATS. Como el turno espera a que termine la voz, una respuesta larga generada por Gemma puede superarlo: el robot habla, pero la web muestra "Error al conectar con el robot.".
+- **La persona puede desaparecer de la escena.** La identidad global solo se calcula en el primer cuadro y luego cada cinco, y el resto de cuadros no la trae. Por eso una pregunta puede caer en `Persona no identificada` aunque haya alguien delante (pendiente de confirmar: falta medir con cámaras reales con qué frecuencia ocurre).
 
 #### 6.4 El micrófono
 
-<!-- pendiente: tarea 9 -->
+El micrófono no tiene un camino propio hasta el modelo: transcribe y entra por la misma puerta que el chat. Por eso la voz obedece siempre la ruta que el operador eligió en la pantalla.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant MIC as Micrófono
+  participant A as AudioService en pmai-core
+  participant R as pba-ms-robotics
+  participant M as pba-ms-management
+  participant C as Turno en pmai-core
+  MIC->>A: tramas de 30 ms a 16 kHz
+  A->>A: compuerta de energía RMS 500
+  A->>A: Vosk con gramática hey fede, fede, federico
+  A->>A: segundo Vosk libre y VAD hasta 1,6 s de silencio
+  A->>R: ROBOTICS_MS.voiceService.speak con frase de espera
+  A->>M: MANAGEMENT_MS.chatService.chat
+  alt ruta Complejo
+    M->>C: MAI_CORE_MS.interactionService.ask
+    C->>R: speak y executeAction
+  else ruta Básico
+    M->>R: speak con la respuesta de OpenAI
+  end
+```
+
+La escucha corre en un hilo propio del núcleo (`pmai-mai-core/src/pmai_core/resources/audio/service.py`). En reposo, una compuerta de volumen descarta el silencio y el resto del audio pasa a un reconocedor Vosk restringido a las palabras de activación. Usar una gramática tan pequeña lo hace rápido y evita falsas activaciones. Cuando oye la palabra, el núcleo abre un reconocedor de vocabulario libre, le reinyecta los 0,4 segundos anteriores para no perder el arranque de la frase y empieza a grabar. La grabación termina cuando el detector de voz de WebRTC cuenta 1,6 segundos de silencio, siempre después de un margen de gracia de 2,2 segundos tras la activación y con un mínimo de un segundo grabado; en ningún caso supera los 20 segundos.
+
+Si la transcripción tiene al menos 14 caracteres, el núcleo dice una de cinco frases de espera ("Uy, buena esa. Dame un segundo.", "Déjame pensarla un momentico.", etc.) y envía el texto a `MANAGEMENT_MS.chatService.chat` con un límite de 30 segundos. La frase de espera se dice también cuando la ruta será Básico. En la ruta Complejo, la pregunta hace así un viaje de ida y vuelta: del núcleo a management y de management de nuevo al núcleo.
+
+La web no captura audio para el robot. La página del chat consulta cada medio segundo `GET /audio/listening-status` y muestra el estado del micrófono ("Conectado, en silencio", "Oyendo", "Frase reconocida"…), el nivel de entrada de 0 a 100 y la última frase reconocida.
 
 #### 6.5 Ciclo de un gesto
 
-<!-- pendiente: tarea 9 -->
+Un gesto puede venir de tres orígenes: el turno ("Voz o chat"), el panel de control de la web y el estudio. Los tres terminan en la misma clase, `SequenceService` de `pba-ms-robotics/src/sequence/sequence_service.py`, que encola pasos en una `PlaybackQueue` y los ejecuta en un hilo llamado `sequence-queue`.
+
+```mermaid
+stateDiagram-v2
+  [*] --> Libre
+  Libre --> Normal: executeAction o startPlayback
+  Normal --> Espera1: último bloque enviado
+  Espera1 --> Neutro: pasó 1 s
+  Neutro --> Espera2: último bloque enviado
+  Espera2 --> Libre: pasó 1 s y la cola está vacía
+  Espera2 --> Normal: pasó 1 s y hay otro gesto en cola
+  Normal --> Libre: Detener
+  Espera1 --> Libre: Detener
+  Neutro --> Libre: Detener
+  Espera2 --> Libre: Detener
+```
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant C as pmai-core
+  participant R as ActionService
+  participant Q as PlaybackQueue
+  participant A as Arduino
+  C->>R: executeAction id 23
+  R->>Q: encola normal, 1 s, neutro, 1 s
+  R-->>C: Encolado
+  C->>R: executeAction id 31
+  R->>Q: encola cuatro pasos más
+  R-->>C: Encolado
+  loop cada bloque cuando vence su inicio
+    Q->>A: PCA,pca,servo,pos,vel
+  end
+```
+
+Por cada id, robótica encola cuatro pasos: la versión normal, una espera de un segundo, la versión neutra y otra espera de un segundo. La llamada `executeAction` responde "Encolado" en cuanto encola, así que el núcleo no se queda esperando a que el robot termine de moverse. Dentro de cada paso, el hilo envía cada bloque al Arduino cuando llega su tiempo de `inicio`, con el comando `PCA,<pca>,<servo>,<pos>,<vel>`. El paso termina cuando se envía el último bloque. El campo `dur` de cada bloque nunca llega al Arduino: la duración real depende de la velocidad `vel` y de la distancia que recorre el servo.
+
+Desde el panel o el estudio, `startPlayback` rechaza una nueva reproducción si la cola está ocupada. Por eso la interfaz deshabilita los botones de gesto mientras el hardware trabaja y solo deja activo Detener. Detener vacía la cola, pero no envía nada al Arduino: los servos terminan de llegar a la última posición que recibieron.
+
+Aquí hay una trampa importante del código actual. `ActionController` (que atiende al turno) y `SequenceController` (que atiende al panel y al estudio) crean cada uno su propio `SequenceService`, y cada servicio tiene su propia cola. En consecuencia, el cajón de runtime de la web y el botón Detener solo ven los gestos lanzados desde el panel o el estudio, no los del turno. Las pruebas no lo detectan porque usan una sola instancia (pendiente de confirmar en el hardware, aunque se deduce directamente del código).
+
+Si no hay ningún Arduino conectado, robótica descarta los pasos de movimiento y solo consume las esperas. En ese caso, el gesto "ocurre" en la cola, pero no mueve nada.
 
 #### 6.6 Visión en tiempo real
 
-<!-- pendiente: tarea 9 -->
+El video que se ve en la página de visión no viaja como un flujo de video, sino como una sucesión de fotos JPEG pedidas dos veces por segundo.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant W as Página de visión
+  participant G as VisionGateway
+  participant C as pmai-core
+  W->>G: abre WebSocket /vision/ws con access_token y activeRole
+  G->>G: valida token, sesión y rol
+  loop cada 500 ms
+    G->>C: MAI_CORE_MS.visionService.getSnapshot
+    C-->>G: cámaras con miniatura JPEG, objetos globales y resumen ReID
+    G-->>W: mensaje snapshot
+  end
+  W->>G: setSelection o setQuality
+  G->>G: cambia cámara o ancho de miniatura
+```
+
+El núcleo mantiene en memoria el último cuadro anotado de cada cámara, con el recuadro, el nombre, el porcentaje de confianza, un identificador corto y la marca `SEEN` si varias cámaras ven a la misma persona. Cuando el gateway pide `getSnapshot`, el núcleo devuelve cada cámara como una miniatura JPEG de calidad 82, con un ancho de 480 píxeles por defecto y de 960 como máximo, junto con la lista de objetos globales y un resumen de la reidentificación.
+
+El gateway valida el token en la cadena de consulta, porque un WebSocket del navegador no puede enviar cabeceras. Si el token no vale, cierra con el código 4001 y la web vuelve al login. La espera máxima de cada petición NATS es de 20 segundos; si el núcleo está ocupado cargando modelos al arrancar, la página puede tardar en mostrar la primera imagen.
+
+La memoria académica describía este mismo flujo con un componente `ngOnInit → connect() → snapshot` validado por `parseVisionSnapshot`; esa estructura sigue presente en `pmas-web-main/src/app/pages/robotics-vision/vision-websocket.service.ts`.
 
 #### 6.7 Creación e ingesta de una secuencia
 
-<!-- pendiente: tarea 9 -->
+Las secuencias nuevas nacen en el estudio de movimiento, que la web muestra incrustado en la página `/sequences`.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor O as Operador
+  participant W as pmas-web-main /sequences
+  participant S as Estudio en iframe
+  participant G as pba-ms-gateway
+  participant R as pba-ms-robotics
+  W->>S: postMessage prometeo-auth con token, rol y URL del gateway
+  O->>S: agrega bloques del gesto y de la pista neutra
+  O->>S: Play en modo Acoplado
+  S->>G: POST /sequence/play con source estudio
+  G->>R: ROBOTICS_MS.sequenceService.startPlayback
+  O->>S: Guardar con nombre, descripción, categoría y Arduino
+  S->>G: POST /sequence/file
+  G->>R: ROBOTICS_MS.sequenceService.saveSequence
+  R->>R: valida, asigna id max más 1 y escribe el JSON canónico
+  R-->>S: secuencia guardada con id
+  Note over R: desde el siguiente turno aparece en getActions
+```
+
+El estudio exige lo mismo que el catálogo: un nombre, una descripción de al menos diez caracteres, una de las seis categorías, el Arduino de destino y las dos pistas, la del gesto y la neutra. Puede generar la pista neutra "rebobinando" el gesto, aunque la propia interfaz advierte que ese neutro automático no es fiable, porque lleva cada servo a la posición 0 en su primer movimiento.
+
+Robótica valida otra vez, convierte el archivo al formato canónico y le asigna un `id` nuevo (el mayor existente más uno) o conserva el que tenía si se sobrescribe. Desde ese momento la secuencia está en `pba-ms-robotics/data/sequences` y aparece en el catálogo del siguiente turno.
+
+La web también puede importar archivos JSON del formato anterior: empareja cada gesto con su neutro por el nombre del archivo y los guarda con `overwrite: true`. Esa importación no exige descripción, lo que probablemente explica que las 31 secuencias actuales no la tengan (pendiente de confirmar: el historial no registra con qué herramienta se crearon).
 
 #### 6.8 Declarar un poema
 
-<!-- pendiente: tarea 9 -->
+`MANAGEMENT_MS.chatService.declarePoema` es un camino aparte y más antiguo que el turno. Lo expone el gateway en `POST /chat/poema` y hace siempre lo mismo: le pide a OpenAI un poema con una instrucción fija escrita en el código, le pide a robótica que lo diga y devuelve el texto.
+
+```mermaid
+sequenceDiagram
+  participant G as pba-ms-gateway
+  participant M as pba-ms-management
+  participant O as OpenAI
+  participant R as pba-ms-robotics
+  G->>M: MANAGEMENT_MS.chatService.declarePoema
+  M->>O: instrucción fija de poema
+  O-->>M: poema
+  M->>R: ROBOTICS_MS.voiceService.speak
+  M-->>G: texto del poema
+```
+
+No pasa por el turno porque no necesita ni visión, ni memoria, ni gestos: es una demostración de voz. Tampoco tiene respaldo local si OpenAI falla. Hoy ningún botón de la web llama a esta ruta; queda disponible para usarla con una herramienta HTTP o desde otra interfaz.
 
 ### 7. Datos y persistencia
 
 #### 7.1 Postgres y Prisma
 
-<!-- pendiente: tarea 9 -->
+La única base de datos relacional de R-ONE es un Postgres compartido. El dueño de sus tablas es `pba-ms-auth`, que las define con Prisma en el esquema `auth`; el gateway se conecta a la misma base, pero solo para leer la tabla `session` al responder `GET /auth/me`. Management tiene un archivo de Prisma heredado sin modelos y no usa la base.
+
+```mermaid
+erDiagram
+  document_type ||--o{ person : "identifica"
+  person ||--o{ user : "puede tener"
+  user ||--o{ session : "abre"
+  user ||--o{ user_role : "tiene"
+  role ||--o{ user_role : "se asigna en"
+  document_type {
+    char36 id PK
+    enum short_name "NATIONAL_ID, IDENTITY_CARD u OTHER"
+    varchar name
+  }
+  person {
+    char36 id PK
+    char36 document_type_id FK
+    varchar first_name
+    varchar last_name
+    varchar email "único"
+    varchar document_number
+    varchar phone
+    datetime deleted_at
+  }
+  user {
+    char36 id PK
+    char36 person_id FK
+    varchar username "único"
+    varchar password "hash bcrypt"
+    int failed_attempts
+    datetime lock_until
+    boolean is_first_login
+    datetime deleted_at
+  }
+  session {
+    char36 id PK
+    char36 user_id FK
+    varchar token "único"
+    datetime expires_at
+    datetime deleted_at
+  }
+  role {
+    char36 id PK
+    enum name "ADMIN o USER"
+  }
+  user_role {
+    char36 id PK
+    char36 user_id FK
+    char36 role_id FK
+  }
+  app_settings {
+    char36 id PK
+    enum key
+    varchar value
+    datetime start_at
+    datetime deleted_at
+  }
+```
+
+El modelo separa a la **persona** del **usuario** a propósito. Una persona es alguien del semillero, con su documento y su correo; un usuario es una cuenta para entrar, con su contraseña y sus roles. Así se puede registrar a alguien sin darle acceso, o darle de baja la cuenta sin borrar sus datos. Casi todas las tablas tienen `deleted_at`: las bajas son lógicas y los listados solo muestran lo que no se ha dado de baja.
+
+La tabla `app_settings` guarda ajustes con historia. Cambiar un ajuste no sobrescribe la fila, sino que marca la vigente como dada de baja y crea una nueva con su fecha de inicio. Los cuatro ajustes que existen son `SESSION_EXPIRATION`, `LOCK_LOGIN_ATTEMPTS`, `LOCK_LOGIN_UNTIL` y `FRONT_END_URL`.
+
+La siembra crea los tres tipos de documento colombianos (cédula de ciudadanía, tarjeta de identidad y otro), los roles ADMIN y USER, tres administradores (`admin-prometeo@unilibre.edu.co`, `admin-prometeo2@unilibre.edu.co` y `admin-prometeo3@unilibre.edu.co`) y los ajustes por defecto. La contraseña de esos administradores está en `pba-ms-auth/prisma/seed.ts` y este documento no la reproduce.
 
 #### 7.2 Milvus Lite
 
-<!-- pendiente: tarea 9 -->
+La memoria del modelo de acción vive en Milvus Lite, dentro del proceso del núcleo, en la carpeta `pmai-model-vision-language/utils/milvus/androide_milvus.db`. Tiene dos colecciones con el mismo tipo de índice (HNSW con distancia coseno, `M=16`, `efConstruction=200`, búsqueda con `ef=64`) y vectores de 384 dimensiones.
+
+| Colección | Qué guarda | Campos | Cuándo acierta |
+|---|---|---|---|
+| `conocimiento` | Preguntas y respuestas verificadas, sembradas desde `preguntas_respuestas.json` (244 pares) | `id`, `pregunta`, `respuesta`, `movimientos` (lista JSON en texto), `vector` | Distancia ≤ 0,35 (≤ 0,28 si la pregunta pide un dato específico) o coincidencia textual |
+| `interacciones` | Respuestas generadas por OpenAI o Gemma, sin el nombre de la persona | `id`, `texto_clave`, `pregunta`, `scene_summary`, `respuesta`, `movimientos`, `vector` | Solo coincidencia estricta: texto igual o contenido, con tres palabras o más |
+
+```mermaid
+flowchart TD
+  Q["Pregunta limpia"] --> E["Embedding de 384 dimensiones"]
+  E --> K["Busca el vecino más cercano en conocimiento"]
+  K --> KD{"¿Distancia menor o igual que el umbral?"}
+  KD -->|"sí"| HIT["Acierto: fuente caché"]
+  KD -->|"no"| KT{"¿Coincidencia textual o Jaccard de al menos 0,45?"}
+  KT -->|"sí"| HIT
+  KT -->|"no"| I["Busca en interacciones solo por texto"]
+  I --> IT{"¿Texto igual o contenido?"}
+  IT -->|"sí"| HIT
+  IT -->|"no"| MISS["Sin acierto: pasa al modelo"]
+```
+
+Además de la búsqueda vectorial, cada búsqueda tiene un respaldo textual: carga hasta mil registros y acepta la igualdad exacta (tras normalizar mayúsculas y tildes), una frase contenida o, solo en `conocimiento`, una similitud de Jaccard de al menos 0,45. Ese respaldo existe para cuando el embedding falla, pero con colecciones grandes se vuelve lento y deja registros fuera.
+
+Dos detalles de rutas confunden a menudo. Primero, Compose define `MILVUS_DB_PATH=/data/milvus/androide_milvus.db`, pero ningún archivo lee esa variable: la ruta está fija en `pmai-model-vision-language/utils/config.py`, y por eso `data/milvus` del lanzador está vacío. Segundo, en la raíz de `pmai-model-vision-language` hay otra carpeta `androide_milvus.db` más antigua, creada por el cuaderno de ingesta, que tampoco se usa.
+
+Hay también un efecto de la siembra que conviene saber. A 171 de los 244 pares sin gesto propio se les asigna `movimientos = [1]`, así que, si alguna vez existe en robótica una secuencia con `id` 1, el robot la ejecutará en todas esas respuestas.
 
 #### 7.3 Secuencias en JSON
 
-<!-- pendiente: tarea 9 -->
+Cada secuencia es un archivo JSON dentro de `pba-ms-robotics/data/sequences`. El nombre lógico es la ruta relativa sin la extensión, y al guardar se sustituyen los caracteres raros por guiones; así, la secuencia `Secuencias/NEGAR 9.0` vive en `pba-ms-robotics/data/sequences/Secuencias/NEGAR-9-0.json`. Este es un extracto real de ese archivo, recortado a dos bloques del gesto y uno del neutro:
+
+```json
+{
+  "version": 1,
+  "id": 23,
+  "name": "Secuencias/NEGAR 9.0",
+  "description": "",
+  "category": "cuello",
+  "blocks": [
+    { "arduino_id": 0, "pca": 0, "servo": 1, "inicio": 0.0, "dur": 0.5, "pos": 420, "vel": 6, "nombre": "rot_cuello" },
+    { "arduino_id": 0, "pca": 3, "servo": 8, "inicio": 0.0, "dur": 1.0, "pos": 650, "vel": 5, "nombre": "ceja_izq" }
+  ],
+  "blocks_neutro": [
+    { "arduino_id": 0, "pca": 0, "servo": 1, "inicio": 0.0, "dur": 1.0, "pos": 560, "vel": 5, "nombre": "rot_cuello" }
+  ]
+}
+```
+
+Cada campo tiene un sentido preciso. `version` es la versión del formato. `id` es el número que usa el catálogo y que el modelo elige; se asigna al guardar y no cambia al sobrescribir. `name` es el nombre visible y `description` es la frase que lee el modelo para decidir si el gesto encaja, por lo que debe tener al menos diez caracteres para entrar al catálogo; en este ejemplo está vacía y por eso la secuencia no se ofrece al turno. `category` es una de seis zonas del cuerpo (en los datos actuales aparecen `cara`, `cuello`, `torso` y `brazo_derecho`).
+
+Cada bloque dice qué Arduino (`arduino_id`), qué placa controladora PCA9685 (`pca`, de 0 a 3) y qué canal (`servo`, de 0 a 15) mover; a qué segundo empezar (`inicio`); hasta qué posición, en ticks de PWM (`pos`); y con qué velocidad (`vel`). `nombre` es una etiqueta legible del servo y `dur` una duración orientativa que el firmware no recibe. El formato antiguo, una lista de siete valores `[pca, servo, inicio, dur, pos, vel, nombre]`, se sigue aceptando al leer.
 
 #### 7.4 Ruta del chat
 
-<!-- pendiente: tarea 9 -->
+La elección entre Básico y Complejo no está en la base de datos, sino en un archivo pequeño: `pba-ms-management/data/chat-route.json`. Hoy contiene `{ "automationEnabled": true, "selectedModel": "complejo" }`.
+
+Management lo vuelve a leer en cada mensaje, de modo que un cambio desde la web aplica a la siguiente pregunta, sin reiniciar nada. Compose monta la carpeta `data` de management, así que el archivo sobrevive a recrear el contenedor; git, en cambio, lo ignora. Si el archivo falta o está corrupto, management asume turnos encendidos y modelo complejo.
+
+Las reglas de cambio las aplica `pba-ms-management/src/chat/chat.service.ts`. Apagar los turnos fuerza el modelo `basico`, y pedir `complejo` con los turnos apagados devuelve un error 409. Desde la web, cualquier usuario puede cambiar el modelo con `PATCH /chat/route/model`, pero solo un ADMIN puede encender o apagar los turnos con `PATCH /chat/route/automation`. La plantilla `.env.template` declara `MS_MANAGEMENT_CHAT_ROUTE_PATH` para mover el archivo, pero Compose no pasa esa variable al contenedor.
 
 #### 7.5 Modelos de IA en disco
 
-<!-- pendiente: tarea 9 -->
+R-ONE usa siete modelos de inteligencia artificial. Algunos vienen dentro del repositorio y otros se descargan la primera vez que se necesitan, lo que explica que el primer arranque sea lento.
+
+| Modelo | Para qué | Archivo o identificador | Tamaño aproximado | Origen |
+|---|---|---|---|---|
+| YOLO11s del semillero | Detectar los 25 rostros | `pmai-mai-core/src/pmai_core/models/my_model.pt` | 19 MB | En el repositorio |
+| OSNet x0.25 | Huella para reidentificar | `pmai-mai-core/src/pmai_core/models/osnet_x0_25_msmt17.onnx` | 0,9 MB | En el repositorio |
+| Vosk small es 0.42 | Voz a texto en español | `pmai-mai-core/src/pmai_core/models/vosk-model-small-es-0.42` | 58 MB | En el repositorio |
+| BLIP base | Describir la escena | `Salesforce/blip-image-captioning-base` | ~1 GB (pendiente de confirmar: medido en Hugging Face, no en el contenedor) | Hugging Face, al arrancar |
+| MiniLM multilingüe | Embeddings de preguntas | `paraphrase-multilingual-MiniLM-L12-v2` | ~470 MB (pendiente de confirmar: medido en Hugging Face, no en el contenedor) | Hugging Face, al arrancar |
+| Gemma 4 E2B Q4_K_M | Respuestas sin internet | `pmai-model-vision-language/models/gguf/gemma-4-E2B-it-Q4_K_M.gguf` | 2,9 GB | Hugging Face, `unsloth/gemma-4-E2B-it-GGUF`, si falta |
+| Piper es_ES davefx | Voz local | `pba-ms-robotics/src/core/models/voice/es_ES-davefx-medium.onnx` | 61 MB | En el repositorio |
+
+El núcleo precarga Milvus, BLIP, el modelo de embeddings y Gemma al arrancar, en `pmai-mai-core/src/pmai_core/pipeline/runtime.py`, para que el primer turno no pague esa espera. El precio es que el contenedor tarda varios minutos en estar listo la primera vez. Compose no monta un volumen para la caché de Hugging Face, así que BLIP y los embeddings probablemente se vuelven a descargar cada vez que se recrea el contenedor (pendiente de confirmar dónde queda esa caché dentro de la imagen). El GGUF, en cambio, se guarda en la carpeta montada del repositorio y sobrevive.
 
 ## Parte III. Repositorios
 
