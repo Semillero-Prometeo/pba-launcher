@@ -617,15 +617,15 @@ def catalogar() -> None:
         if target.startswith("media/"):
             rels[rid] = target
     doc = (out / "word/document.xml").read_text(encoding="utf-8")
-    rows, pending, last = [], [], "inicio"
+    # En este Word el pie va encima de su imagen: cada imagen pertenece al último pie visto.
+    rows, current, caption = [], "sin-pie-inicial", ""
     for para in re.findall(r"<w:p[ >].*?</w:p>", doc, re.S):
-        pending += [rels[r] for r in re.findall(r'r:embed="([^"]+)"', para) if r in rels]
         text = "".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", para)).strip()
         m = re.match(r"Ilustraci[oó]n\s*(\d+)", text)
-        if m and pending:
-            rows += [[m.group(1), media, text, "", ""] for media in pending]
-            pending, last = [], m.group(1)
-    rows += [[f"sin-pie-tras-{last}", media, "", "", ""] for media in pending]
+        if m:
+            current, caption = m.group(1), text
+        rows += [[current, rels[r], caption, "", ""]
+                 for r in re.findall(r'r:embed="([^"]+)"', para) if r in rels]
     with TSV.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f, delimiter="\t")
         w.writerow(["ilustracion", "medio", "pie", "decision", "destino"])
