@@ -752,7 +752,7 @@ Fuentes: `pba-ms-auth/prisma/schema.prisma` (modelos, relaciones, enums completo
 Run: `for f in docs/project-docs/.work/notes/{pba-launcher,pmas-web-main,pba-ms-gateway,pba-ms-auth}.md; do python3 docs/project-docs/.work/check_doc.py "$f"; done`
 Expected: cuatro líneas `check_doc: 0 errores, …`.
 
-Run: `rg -L "^## Pendiente de confirmar" docs/project-docs/.work/notes/{pba-launcher,pmas-web-main,pba-ms-gateway,pba-ms-auth}.md`
+Run: `rg --files-without-match "^## Pendiente de confirmar" docs/project-docs/.work/notes/{pba-launcher,pmas-web-main,pba-ms-gateway,pba-ms-auth}.md`
 Expected: sin salida (todas las notas tienen la plantilla completa).
 
 No hay commit: las notas están ignoradas.
@@ -794,7 +794,7 @@ Fuentes: `pmas-web-motion-studio/src/app.py`, `src/static/` (HTML, JS como `libr
 Run: `for f in docs/project-docs/.work/notes/{pba-ms-management,pba-ms-robotics,pba-arduino-codes,pmas-web-motion-studio}.md; do python3 docs/project-docs/.work/check_doc.py "$f"; done`
 Expected: cuatro líneas `check_doc: 0 errores, …`.
 
-Run: `rg -L "^## Pendiente de confirmar" docs/project-docs/.work/notes/{pba-ms-management,pba-ms-robotics,pba-arduino-codes,pmas-web-motion-studio}.md`
+Run: `rg --files-without-match "^## Pendiente de confirmar" docs/project-docs/.work/notes/{pba-ms-management,pba-ms-robotics,pba-arduino-codes,pmas-web-motion-studio}.md`
 Expected: sin salida.
 
 ---
@@ -833,7 +833,7 @@ Fuentes: `pmai-model-vision/README.md`, `data.yaml` (25 clases con sus nombres),
 Run: `for f in docs/project-docs/.work/notes/{pmai-mai-core,pmai-model-context,pmai-model-vision-language,pmai-model-vision}.md; do python3 docs/project-docs/.work/check_doc.py "$f"; done`
 Expected: cuatro líneas `check_doc: 0 errores, …`.
 
-Run: `rg -L "^## Pendiente de confirmar" docs/project-docs/.work/notes/{pmai-mai-core,pmai-model-context,pmai-model-vision-language,pmai-model-vision}.md`
+Run: `rg --files-without-match "^## Pendiente de confirmar" docs/project-docs/.work/notes/{pmai-mai-core,pmai-model-context,pmai-model-vision-language,pmai-model-vision}.md`
 Expected: sin salida.
 
 ---
