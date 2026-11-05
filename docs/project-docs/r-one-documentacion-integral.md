@@ -886,27 +886,814 @@ El núcleo precarga Milvus, BLIP, el modelo de embeddings y Gemma al arrancar, e
 
 ### 15. pmai-mai-core
 
-<!-- pendiente: tarea 11 -->
+#### 15.1 Propósito
+
+`pmai-mai-core` es el núcleo de percepción e interacción de R-ONE. Descubre y lee las cámaras, detecta con YOLO los rostros de los integrantes del semillero, los sigue dentro de cada cámara, les asigna una identidad global con ReID, escucha el micrófono con Vosk y arma el turno: persona, recorte, descripción de escena, catálogo de gestos, respuesta, voz y movimientos. Dicho de otro modo, es el proceso que ve, oye y decide qué decir; no es quien habla ni quien mueve los servos.
+
+Lo que no le toca queda en otros repositorios a propósito. No abre HTTP ni WebSocket propios: la pantalla recibe el video a través del gateway. No sintetiza voz ni encola gestos: eso lo hace `pba-ms-robotics`. No elige la ruta Básico o Complejo: eso lo hace `pba-ms-management`. Tampoco contiene la lógica de describir una imagen ni la de redactar la respuesta: las importa, en el mismo proceso, de `pmai-model-context` (paquete `model_context`) y de `pmai-model-vision-language` (paquete `utils`). El recorrido de una pregunta está en [6.3](#63-chat-por-la-ruta-complejo-el-turno) y [6.4](#64-el-micrófono); esta ficha baja al código que lo ejecuta.
+
+#### 15.2 Versión
+
+La versión leída es la de la tabla [Versión documentada](#versión-documentada): rama `dev`, commit `e0452ed`, fecha 2026-10-27. El paquete declara versión `0.1.0` en `pmai-mai-core/pyproject.toml`. El script de consola es `pmai-core = "pmai_core.__main__:main"`.
+
+#### 15.3 Tecnología
+
+El servicio corre en Python 3.12 o superior, empaquetado con Hatchling. La imagen de desarrollo parte de `python:3.12-slim` (`pmai-mai-core/Dockerfile.dev`). Las dependencias propias cubren visión (`opencv-python-headless`, `onnxruntime`, `ultralytics`, `numpy`), audio (`sounddevice`, `vosk`, `webrtcvad-wheels`), configuración (`pydantic`, `pydantic-settings`), mensajería (`nats-py`) y trazas (`structlog`). El extra `dev` añade `pytest`, `pytest-asyncio`, `ruff`, `mypy` y `watchfiles`.
+
+En la misma imagen se instalan además los dos modelos hermanos, porque el núcleo los importa en el mismo proceso: `pmai-model-context` (torch y transformers) y `pmai-model-vision-language` (Milvus Lite, sentence-transformers, llama-cpp-python, openai). Por eso el Dockerfile instala ffmpeg, v4l-utils, portaudio, libasound2, libgl1, build-essential y cmake: los dos últimos hacen falta para compilar `llama-cpp-python`. Compose construye esa imagen con el contexto en la raíz del lanzador, no dentro de `pmai-mai-core`, para poder copiar a los tres repositorios a la vez.
+
+#### 15.4 Árbol
+
+```text
+pmai-mai-core/
+  src/pmai_core/                 # paquete instalable
+    __main__.py                  # CLI: python -m pmai_core
+    app.py                       # arranque y cableado
+    settings.py                  # modelos Pydantic de settings.toml
+    api/                         # controladores NATS y clientes salientes
+      health/                    # healthService.health
+      camera/                    # listado y vista JPEG
+      monitoring/                # identidades, pistas y ReID
+      vision/                    # snapshot para la pantalla
+      audio/                     # micrófono
+      interaction/               # interactionService.ask
+      management_ms/             # cliente a chatService.chat
+      robotics_ms/               # cliente a voz y gestos
+    core/                        # NATS de petición-respuesta al estilo NestJS
+    messaging/                   # segundo cliente: eventos pmai.detection y pmai.reid
+    domain/                      # BBox, Detection, TrackedObject, eventos
+    pipeline/                    # motor, objetos globales, recorte, turno
+    resources/
+      camera/                    # V4L2, captura por hilo, gestor
+      vision/                    # YOLO, seguidor IoU, recuadros
+      reid/                      # OSNet ONNX, comparador, galería
+      identification/            # orquesta detección, seguimiento, ReID
+      audio/                     # palabra de activación, VAD, Vosk
+    models/                      # my_model.pt, OSNet, Vosk
+  tests/                         # turno, cableado, audio y contrato de visión
+  settings.toml                  # configuración efectiva en el contenedor
+  Dockerfile.dev                 # imagen; contexto en la raíz del lanzador
+```
+
+La organización separa tres capas que no deben mezclarse. `resources/` habla con el hardware y con los pesos: cámaras, detector, ReID, micrófono. `pipeline/` convierte ese estado en algo usable: un bucle cada 0,75 s, una escena de objetos globales y el turno. `api/` es la fachada NATS, una carpeta por servicio, más dos clientes salientes hacia management y robótica. Hay dos conexiones NATS a propósito: `core/` imita el sobre de NestJS para petición-respuesta, y `messaging/` publica eventos sin esperar respuesta. Los pesos viven versionados en `pmai-mai-core/src/pmai_core/models/` para que el contenedor no dependa de una descarga al arrancar.
+
+#### 15.5 Archivos clave
+
+- `pmai-mai-core/src/pmai_core/__main__.py`: punto de entrada. Lee `settings.toml` o la ruta de `sys.argv[1]`, construye `Settings.from_toml` y lanza `run_app` con `asyncio.run`.
+- `pmai-mai-core/src/pmai_core/app.py`: cablea el arranque en este orden: cámaras, cliente de eventos, identificación y audio, NATS de RPC, precarga de Milvus, BLIP, embeddings y Gemma, `InteractionTurn`, enlace del micrófono al chat de management, registro de suscriptores y las tareas `pipeline`, `audio_poll` y, si aplica, `cam_poll`.
+- `pmai-mai-core/src/pmai_core/pipeline/interaction_turn.py`: el turno completo. El controlador NATS solo le pasa el mensaje y la fuente `chat`.
+- `pmai-mai-core/src/pmai_core/pipeline/runtime.py`: precarga. Importa `model_context.model.import_Blip_model`, `utils.milvus.conexion.get_client`, `utils.encoder.encoder` y `utils.gguf.ggufapi.precargar`.
+- `pmai-mai-core/src/pmai_core/core/nats/nats_subscribers.py`: los 14 sujetos RPC, todos con prefijo `MAI_CORE_MS`.
+- `pmai-mai-core/src/pmai_core/core/nats/nats_client.py`: `NatsHandler`. Espera el sobre `{pattern, data, id}`, responde `{response, isDisposed}` y ofrece `sync_request` para las llamadas salientes desde hilos.
+- `pmai-mai-core/src/pmai_core/resources/identification/service.py`: `run_phase`. Detecta, sigue, corre ReID y publica eventos. Inicializa ONNX antes que PyTorch.
+- `pmai-mai-core/src/pmai_core/resources/audio/service.py`: hilo de escucha, palabra de activación, VAD y despacho de la transcripción a `MANAGEMENT_MS.chatService.chat`.
+- `pmai-mai-core/settings.toml`: configuración efectiva. Compose la monta en `/app/settings.toml`.
+- `pmai-mai-core/Dockerfile.dev`: copia `pmai-mai-core`, `pmai-model-context` y `pmai-model-vision-language` y los instala. Un contexto limitado a este repositorio no vería a sus hermanos.
+
+#### 15.6 Contratos
+
+mai-core no sirve HTTP. El gateway traduce las rutas de cámara, monitoreo, visión, audio y salud a los sujetos de abajo; el catálogo global está en el [Anexo C](#anexo-c-patrones-nats). El manejador espera el sobre de NestJS, pasa `data["data"]` al controlador y responde `{response, isDisposed: true}`. JSON inválido produce `{err: "Invalid JSON"}`; cualquier otra excepción, `{err: …}`, que el gateway convierte en 400.
+
+Contratos expuestos (RPC, `ms_name = "MAI_CORE_MS"`):
+
+| Sujeto | Entrada | Salida | Archivo |
+|---|---|---|---|
+| `MAI_CORE_MS.healthService.health` | ignorada | `{status: "UP", timestamp, msName}` | `pmai-mai-core/src/pmai_core/api/health/health_controller.py` |
+| `MAI_CORE_MS.cameraService.getCameras` | ignorada | `{version, count, cameras}` | `pmai-mai-core/src/pmai_core/api/camera/camera_controller.py` |
+| `MAI_CORE_MS.cameraService.getCameraView` | `{camera_id}` | JPEG calidad 90 con recuadros, o 404 | `pmai-mai-core/src/pmai_core/api/camera/camera_controller.py` |
+| `MAI_CORE_MS.monitoringService.getObjects` | ignorada | `{identities, ids}` | `pmai-mai-core/src/pmai_core/api/monitoring/monitoring_controller.py` |
+| `MAI_CORE_MS.monitoringService.getTrackers` | ignorada | `{active_cameras}` | `pmai-mai-core/src/pmai_core/api/monitoring/monitoring_controller.py` |
+| `MAI_CORE_MS.monitoringService.getTrackedObjects` | ignorada | `{count, objects}` de tipo `GlobalObjectForContext` | `pmai-mai-core/src/pmai_core/api/monitoring/monitoring_controller.py` |
+| `MAI_CORE_MS.monitoringService.getReidStatus` | ignorada | identidades, cámaras vistas y cruce | `pmai-mai-core/src/pmai_core/api/monitoring/monitoring_controller.py` |
+| `MAI_CORE_MS.visionService.getSnapshot` | `{selectedCameraId, thumbMaxWidth, previewMaxWidth}` | camelCase con miniaturas JPEG 82; `previewJpegBase64` siempre `null` | `pmai-mai-core/src/pmai_core/api/vision/vision_controller.py` |
+| `MAI_CORE_MS.microphoneService.listMicrophones` | ignorada | lista, seleccionado y huella | `pmai-mai-core/src/pmai_core/api/audio/audio_controller.py` |
+| `MAI_CORE_MS.microphoneService.selectMicrophone` | `{microphone_id}` | `{status: "ok", selected_microphone_id}` | `pmai-mai-core/src/pmai_core/api/audio/audio_controller.py` |
+| `MAI_CORE_MS.microphoneService.startListening` | ignorada | `{status: "ok", message}` | `pmai-mai-core/src/pmai_core/api/audio/audio_controller.py` |
+| `MAI_CORE_MS.microphoneService.stopListening` | ignorada | `{status: "ok", message}` | `pmai-mai-core/src/pmai_core/api/audio/audio_controller.py` |
+| `MAI_CORE_MS.microphoneService.getListeningStatus` | ignorada | `running`, `phase`, `input_level` 0–100, última transcripción | `pmai-mai-core/src/pmai_core/api/audio/audio_controller.py` |
+| `MAI_CORE_MS.interactionService.ask` | `{message}` | `{reply, fuente, movimientos: [{id, name}]}` | `pmai-mai-core/src/pmai_core/api/interaction/interaction_controller.py` |
+
+El controlador de `ask` llama siempre `turn.ask(message, "chat")`, también cuando la pregunta nació en el micrófono. Por eso las ramas `voice` del turno no se alcanzan en el despliegue (ver [15.9](#159-trampas)).
+
+Eventos publicados, sin respuesta, con prefijo `subject_prefix = "pmai"`: `pmai.detection` (`ObjectDetectedEvent`) y `pmai.reid` (`ObjectReIdentifiedEvent`). Ningún otro repositorio del lanzador se suscribe a ellos.
+
+Contratos consumidos. Todas las peticiones salientes usan `NatsHandler.sync_request`, que envía `{id: "audio-voice-dispatch", data}` —el mismo `id` para todo, también en el turno—, espera `timeout + 2` s y lanza `RuntimeError` si la respuesta trae `err`. Solo puede llamarse desde un hilo de trabajo, nunca desde el bucle principal; de ahí que `ask` corra en `asyncio.to_thread`.
+
+| Destino | Entrada | Salida esperada | Archivo |
+|---|---|---|---|
+| `ROBOTICS_MS.voiceService.speak` | `{message}`, 30 s | respuesta de robótica | `pmai-mai-core/src/pmai_core/api/robotics_ms/robotics_ms_service.py` |
+| `ROBOTICS_MS.actionService.getActions` | `{}`, 10 s | `response["data"]` como lista de `{id, name, arduino_id, description}` | `pmai-mai-core/src/pmai_core/api/robotics_ms/robotics_ms_service.py` |
+| `ROBOTICS_MS.actionService.executeAction` | `{action_id, arduino_id}`, 10 s | acuse de encolado | `pmai-mai-core/src/pmai_core/api/robotics_ms/robotics_ms_service.py` |
+| `MANAGEMENT_MS.chatService.chat` | `{message}`, 30 s | la respuesta del chat (el micrófono la ignora) | `pmai-mai-core/src/pmai_core/api/management_ms/management_ms_service.py` |
+| `model_context.model.import_Blip_model` | sin argumentos | `(processor, model)` en la caché | `pmai-mai-core/src/pmai_core/pipeline/runtime.py` |
+| `model_context.context.generate_context_from_base64` | JPEG en base64, processor, model | `(contexto, "")`; se descarta el segundo valor | `pmai-mai-core/src/pmai_core/app.py` |
+| `utils.main.responder` | objeto de escena y catálogo | ver [17.6](#176-contratos) | `pmai-mai-core/src/pmai_core/app.py` |
+
+Si el `import` de `utils.main` falla al arrancar, el turno responde siempre la disculpa con `movimientos: []` y sin clave `fuente`, de modo que la fuente visible queda vacía y no `disculpa`.
+
+El pipeline de visión, por dentro del código, es este. El flujo que ve el operador está en [6.6](#66-visión-en-tiempo-real); aquí importa el orden de las funciones.
+
+```mermaid
+flowchart TD
+  Cam["Camaras USB, RTSP o videos"] --> Hilo["Hilo de captura y cola de 4 cuadros"]
+  Hilo --> Motor["Motor cada 0.75 s"]
+  Motor --> Yolo["Deteccion YOLO con my_model.pt"]
+  Yolo --> Track["Seguimiento IoU por camara"]
+  Track --> CadaCinco{"ReID en cuadro 1 y cada 5"}
+  CadaCinco -->|"si"| Osnet["OSNet compara con la galeria"]
+  CadaCinco -->|"no"| SinId["TrackedObject sin id_global"]
+  Osnet --> Glob["Objetos globales por identidad"]
+  SinId --> Snap["visionService.getSnapshot"]
+  Glob --> Snap
+  Glob --> Evt["Eventos pmai.detection y pmai.reid"]
+  Snap --> Pantalla["El gateway reenvia el snapshot a la pantalla"]
+```
+
+El turno, también por dentro del código. El recuento de pasos para cualquier lector está en [6.3](#63-chat-por-la-ruta-complejo-el-turno); este diagrama nombra los módulos.
+
+```mermaid
+flowchart TD
+  Nats["MAI_CORE_MS.interactionService.ask"] --> Ctrl["api/interaction"]
+  Ctrl --> HiloAsk["asyncio.to_thread con fuente chat"]
+  HiloAsk --> Turn["pipeline/interaction_turn.py"]
+  Turn --> Lock{"Candado libre"}
+  Lock -->|"no"| Ocupado["fuente ocupado"]
+  Lock -->|"si"| Persona["choose_person"]
+  Persona --> Recorte["recorte JPEG calidad 85"]
+  Recorte --> Blip["generate_context_from_base64"]
+  Blip --> Cat["getActions"]
+  Cat --> Resp["responder"]
+  Resp --> Fuente["_fuente_visible"]
+  Fuente --> Gestos["hasta 3 ids del catalogo de esa llamada"]
+  Gestos --> Habla["speak y executeAction en paralelo"]
+  Habla --> Out["reply, fuente, movimientos"]
+```
+
+`_fuente_visible` traduce lo que devuelve `responder()`: `fuente == "cache"` pasa a `caché`; `backend == "openai"` a `OpenAI`; `fuente == "llm"` o `backend == "gguf"` a `Gemma (local)`; cualquier otro valor se deja tal cual. Los valores que mai-core puede producir son `caché`, `OpenAI`, `Gemma (local)`, `ocupado`, `voz corta`, `disculpa` y, si falló el import, la cadena vacía.
+
+#### 15.7 Configuración
+
+La configuración efectiva vive en `pmai-mai-core/settings.toml`. Entre paréntesis, el valor por defecto de `pmai-mai-core/src/pmai_core/settings.py` cuando difiere. La lista de variables de Compose está en el [Anexo B](#anexo-b-variables-de-entorno).
+
+| Clave | Valor en el TOML | Efecto |
+|---|---|---|
+| `app.name` | `pmai-core` | Solo se registra en el log de arranque |
+| `app.log_level` | `INFO` | Ningún módulo la lee; structlog usa su configuración por defecto |
+| `camera.source_mode` | `v4l2` | `v4l2` descubre USB; `video_folder` trata cada video como `usb_0..N` |
+| `camera.auto_discover` | `true` | Activa el descubrimiento V4L2 y el sondeo en caliente |
+| `camera.poll_interval_seconds` | `10` | Periodo del sondeo de cámaras |
+| `camera.default_resolution` | `[640, 480]` | Se pide a cada cámara V4L2 |
+| `camera.default_fps` | `15` | Se pide a cada cámara V4L2 |
+| `camera.video_folder_path` | `/data` | Carpeta de videos de desarrollo; Compose monta `./data:/data:ro` |
+| `camera.video_extensions` | `.mp4`, `.avi`, `.mov`, `.mkv`, `.webm` | Extensiones aceptadas en modo carpeta |
+| `camera.video_loop` | `true` | El video se repite |
+| `camera.video_fps` | `15` | Lectura de archivo |
+| `vision.model_path` | `/app/src/pmai_core/models/my_model.pt` | Detector; el defecto de Pydantic es `models/yolo11n.onnx` |
+| `vision.confidence_threshold` | `0.5` | Descarta detecciones por debajo |
+| `vision.device` | `cpu` | Dispositivo de YOLO |
+| `reid.model_path` | `/app/src/pmai_core/models/osnet_x0_25_msmt17.onnx` | Extractor; el defecto de Pydantic es `models/osnet_ain_x0_25.onnx` |
+| `reid.similarity_threshold` | `0.6` | Similitud coseno mínima (defecto 0.7) |
+| `reid.embedding_update_interval` | `5` | ReID en el cuadro 1 y luego cada 5 cuadros por cámara |
+| `reid.gallery_max_size` | `1000` | Tope del registro; al llenarse expulsa la identidad con menos actualizaciones |
+| `pipeline.result_interval_seconds` | `0.75` | Espera entre iteraciones y entre eventos (defecto 1.0) |
+| `audio.enabled` | `true` | Si es falso, el hilo de audio no arranca |
+| `audio.auto_start_listening` | `true` | Estado inicial de `listening_enabled` |
+| `audio.auto_select_microphone` | `true` | Elige el primero de la lista (USB primero) si no hay preferido |
+| `audio.preferred_microphone_id` | `""` | Huella preferida; vacía = automático |
+| `audio.sample_rate` | `16000` | Tasa deseada; si no, la primera compatible y remuestreo a 16 kHz |
+| `audio.channels` | `1` | Mono |
+| `audio.chunk_ms` | `30` | Trama de 480 muestras a 16 kHz |
+| `audio.long_silence_ms` | `1600` | Silencio que cierra la frase |
+| `audio.post_wake_grace_ms` | `2200` | Tras la palabra de activación el silencio no cuenta (defecto 1800) |
+| `audio.max_recording_seconds` | `20.0` | Tope de captura (defecto 12.0) |
+| `audio.min_recording_seconds` | `1.0` | Mínimo grabado (defecto 0.8) |
+| `audio.preroll_seconds` | `0.4` | Audio previo reinyectado al reconocedor de la orden |
+| `audio.min_useful_transcript_chars` | `14` | Por debajo no se dice la frase de "pensando" |
+| `audio.fallback_speak_message` | frase de "no te escuché" | Ningún módulo la lee; el turno usa su propia constante |
+| `audio.wake_phrases` | `hey fede`, `fede`, `federico` | Gramática de activación (defecto `hey fede`, `hola fede`) |
+| `audio.thinking_phrases` | cinco frases | Rotación antes de despachar una transcripción larga |
+| `audio.wake_partial_match` | `true` | Acepta la frase al final de lo oído |
+| `audio.wake_energy_rms` | `500` | Compuerta de energía hacia el reconocedor de activación |
+| `audio.wake_energy_hangover_ms` | `300` | Cola de esa compuerta |
+| `audio.wake_confirm_chunks` | `2` | Parciales iguales seguidos para abrir |
+| `audio.level_rms_full_scale` | `4000` | Escala del medidor `input_level` |
+| `audio.level_hold_ms` | `500` | Retención del medidor |
+| `audio.vosk_model_path` | `/app/src/pmai_core/models/vosk-model-small-es-0.42` | Modelo de español |
+| `audio.poll_interval_seconds` | `5.0` | Resincroniza la selección con el hardware |
+| `nats.url` | `nats://localhost:4222` | Lo pisa `NATS_SERVER` si existe |
+| `nats.subject_prefix` | `pmai` | Prefijo de eventos |
+| `nats.ms_name` | `MAI_CORE_MS` | Prefijo de los sujetos RPC |
+
+`camera.sources` no está en el TOML: Pydantic la deja en `[]`. Sirve para fuentes manuales `stream` o `file` (RTSP, MJPEG o archivo) y es la vía que Compose recomienda en WSL2, donde los dispositivos V4L2 van comentados.
+
+Variables del servicio `pmai-core` en Compose:
+
+| Variable | Valor de plantilla | Efecto |
+|---|---|---|
+| `NATS_SERVER` | `nats://nats-server:4222` | Pisa `nats.url` |
+| `PMAI_SETTINGS` | `/app/settings.toml` | Ningún módulo la lee; la ruta llega como argumento del comando |
+| `PYTHONPATH` ← `PMAI_CORE_PYTHONPATH` | `/opt/model-context:/opt/action-model:/app/src` | Resolución de `model_context`, `utils` y `pmai_core` |
+| `OPENAI_API_KEY` | clave de acción o, si va vacía, la de management | La lee `utils.gpt.gptapi` |
+| `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS` | `1` | Acotan PyTorch y BLAS; Gemma usa `n_threads=os.cpu_count()` y no los respeta |
+| `MILVUS_DB_PATH` | `/data/milvus/androide_milvus.db` | Ningún módulo la lee |
+| `PMAI_CORE_PORT` | `3004` | Se publica; nada escucha en él |
+
+`PMAI_CORE_PYTHONPATH` no se recorta a `/app/src`. La imagen instala con pip una copia de los dos modelos en site-packages, y Compose monta el código vivo en `/opt/model-context` y `/opt/action-model`. El orden del `PYTHONPATH` hace que esas rutas montadas ganen sobre la copia congelada de la imagen, y que `/app/src` resuelva `pmai_core`. Si se dejara solo `/app/src`, el núcleo importaría la versión instalada al construir la imagen y los cambios en BLIP, Milvus o el prompt no tendrían efecto hasta reconstruir. Por eso el lanzador fija las tres rutas y `AGENTS.md` prohíbe recortarlas.
+
+El comando del contenedor es `watchfiles "python -m pmai_core /app/settings.toml" /app/src`. Reinicia el proceso al cambiar archivos bajo `/app/src`; no vigila `settings.toml` ni el código de los modelos en `/opt`.
+
+#### 15.8 Pruebas
+
+El comando es `pytest` desde `pmai-mai-core` (`testpaths = ["tests"]`, `asyncio_mode = "auto"`, `pythonpath = ["src"]`).
+
+`pmai-mai-core/tests/test_interaction_turn.py` cubre el desempate por `id_global`, el recorte JPEG en base64, la voz corta sin modelo, el segundo turno ocupado sin hablar en chat, el turno sin persona sin BLIP y el fallo de BLIP que igual responde. `pmai-mai-core/tests/test_interaction_wiring.py` cubre `getActions` y `executeAction`, que el controlador `ask` usa la fuente `chat` y el despacho de voz. `pmai-mai-core/tests/test_audio_dispatch.py` comprueba que la transcripción va al chat enlazado y no al turno. `pmai-mai-core/tests/test_vision_pipeline_contract.py` exige un solo JPEG por miniatura, `previewJpegBase64` nulo, límites 480/960 y `result_interval_seconds = 1.0` en el TOML. `pmai-mai-core/tests/audio/` cubre descubrimiento de micrófonos, energía, nivel, reglas de escucha, remuestreo, selección y coincidencia de la palabra de activación.
+
+Resultado registrado en las notas, ejecutado con `pmai-mai-core/.venv` y sin escribir cachés: las dos pruebas de turno y cableado no se recolectan porque ese entorno no tiene `nats-py`; del resto, 48 pasan y 1 falla, `test_pipeline_interval_is_one_second`, porque el TOML dice `0.75` y la prueba sigue exigiendo `1.0`. Pendiente de confirmar: si el valor 0,75 es intencional (lo cambió el commit `52eba23`) y la prueba quedó desactualizada.
+
+#### 15.9 Trampas
+
+El invariante del turno es uno solo a la vez: un `threading.Lock` no bloqueante. Si está tomado, la respuesta es "Sigo respondiendo, un momento." con fuente `ocupado`, y solo se pronuncia si la fuente es `voice`. Esa rama `voice` —voz corta y ocupado hablado— no se alcanza en el despliegue. El micrófono despacha a `MANAGEMENT_MS.chatService.chat` y management llama a `interactionService.ask`, cuyo controlador fija la fuente `chat`. `bind_turn` guarda el turno en el audio, pero nadie lo usa. De ahí que `voz corta` y el ocupado hablado solo aparecerían si alguien llamara a `ask(..., "voice")` directamente.
+
+`id_global` solo existe en los cuadros donde corre ReID: el primero y luego cada cinco. El seguidor crea cada `TrackedObject` con `global_id=""`, y `compute_global_objects_for_context` descarta los objetos sin identidad. Como el último cuadro anotado se sobrescribe en cada iteración, en cuatro de cada cinco vueltas la escena puede no tener personas y el turno caer en `Persona no identificada` aunque alguien esté frente a la cámara. Pendiente de confirmar: con qué frecuencia ocurre eso con cámaras reales. Además, la etiqueta de la persona es el nombre de la clase YOLO (un integrante del semillero), no el identificador ReID.
+
+El aviso de catálogo vacío escribe `reason="sin_arduino"` y habla de que no hay puerto serie `ttyACM`/`ttyUSB` (`pmai-mai-core/src/pmai_core/api/robotics_ms/robotics_ms_service.py`). Eso contradice el contrato de robótica y `AGENTS.md`: un almacén sin pares completos o un JSON legado produce lista vacía aunque el Arduino esté conectado, y esa lista vacía no es un fallo del turno. El texto del log engaña; manda lo que responde `getActions`.
+
+Otras invariantes que no se deben romper. ONNX Runtime (ReID) se inicializa y calienta antes que PyTorch (YOLO) para evitar un bloqueo de OpenMP; no se reordena, y la inferencia corre en `asyncio.to_thread` por la misma razón. El detector recibe el cuadro BGR crudo: no aplica el balance de blancos ni el CLAHE del entrenamiento (ver [18.9](#189-trampas)). `watchfiles` solo vigila `/app/src`, así que cambiar `pmai-mai-core/settings.toml` o el código montado en `/opt` no reinicia el proceso. `PMAI_CORE_PORT` se publica y no hay servidor. `PMAI_SETTINGS` y `MILVUS_DB_PATH` se definen y nadie las lee. Compose siempre define `OPENAI_API_KEY`, aunque sea vacía, y `load_dotenv(..., override=False)` no pisa una variable que ya existe: el `.env` de `pmai-model-vision-language` no sirve de respaldo dentro del contenedor. Si BLIP no se precargó, cada turno falla al leer `cache["processor"]` nulo y sigue con contexto vacío, sin recarga perezosa. Una cámara V4L2 se abandona tras 50 lecturas fallidas seguidas. El registro de identidades vive solo en memoria: al reiniciar se pierden todos los `id_global`. Pendiente de confirmar: si `voiceService.speak` bloquea hasta terminar de reproducir, una respuesta larga superaría los 30 s de `sync_request` y el turno registraría `turn_speak_failed`. Pendiente de confirmar: dónde guardan BLIP y sentence-transformers su caché de Hugging Face dentro del contenedor; Compose no monta un volumen para ella.
 
 ### 16. pmai-model-context
 
-<!-- pendiente: tarea 11 -->
+#### 16.1 Propósito
+
+`pmai-model-context` describe en una frase corta, en inglés, lo que se ve en el recorte de la persona elegida para el turno. Esa frase es el "contexto visual": no se muestra en la pantalla, sino que viaja dentro del objeto de escena hasta el modelo de acción, que la interpreta y responde en español. Para producirla carga BLIP desde Hugging Face, decodifica un JPEG en base64, genera el texto con búsqueda por haces y lo limpia de alucinaciones frecuentes.
+
+No elige a la persona, no recorta la imagen y no responde la pregunta: eso lo hacen `pmai-mai-core` y `pmai-model-vision-language`. Tampoco entrena. Pese a que el cuaderno habla de entrenar modelos, el repositorio solo usa un modelo preentrenado. La historia de por qué se eligió BLIP-base está en [30](#30-el-modelo-contextual); esta ficha documenta lo que corre hoy. El paso del turno que lo llama está en [6.3](#63-chat-por-la-ruta-complejo-el-turno) y el concepto en [4.5](#45-descripción-de-escena).
+
+#### 16.2 Versión
+
+La versión leída es la de la tabla [Versión documentada](#versión-documentada): rama `dev`, commit `400ec0d`, fecha 2026-10-09. El paquete declara versión `0.1.0` en `pmai-model-context/pyproject.toml`. El commit `ac2703f` del mismo día renombró el paquete de `utils` a `model_context`.
+
+#### 16.3 Tecnología
+
+Python 3.12 o superior, empaquetado con setuptools y el paquete explícito `model_context`. En ejecución bastan torch, transformers menor que 5, Pillow y Pydantic. El resto de dependencias declaradas (`datasets`, Jupyter, `spiceypy`, `pycocoevalcap`, matplotlib) es del cuaderno de experimentación. La gestión local es con uv (`pmai-model-context/uv.lock`). No lee variables de entorno.
+
+#### 16.4 Árbol
+
+```text
+pmai-model-context/
+  model_context/          # paquete importable (antes se llamaba utils)
+    model.py              # carga de BLIP y cuantización
+    context.py            # generación y limpieza
+    cache.py              # caché de módulo
+    decoder.py            # base64 a imagen RGB
+    local_object.py       # copia de GlobalObjectForContext; mai-core no la usa
+  objetos/                # 41 imágenes de prueba en base64, ~27,7 MB
+  tests/                  # una prueba de importación
+  main.ipynb              # experimentación: carga, cuantización y recorrido de objetos
+```
+
+El repositorio es una biblioteca, no un servicio. Por eso no hay `api/`, ni NATS, ni Dockerfile propio: vive montado en `/opt/model-context` dentro del contenedor de mai-core. La carpeta `objetos/` y el cuaderno son material de laboratorio; el turno no los toca.
+
+#### 16.5 Archivos clave
+
+- `pmai-model-context/model_context/model.py`: `MODEL_ID` e `import_Blip_model` (carga única cacheada) y `get_quantized_blip_model` (cuantización dinámica, no usada en el turno).
+- `pmai-model-context/model_context/context.py`: `PROTECTED_WORDS`, `SUSPICIOUS_WORDS`, `HALLUCINATION_PATTERNS`, `clean_caption`, `generate_context` y `generate_context_from_base64`.
+- `pmai-model-context/model_context/cache.py`: diccionario de módulo `_MODEL_CACHE` con `processor`, `model`, `model_quantized` y metadatos; `get_cache`, `update_cache`, `clear_cache`.
+- `pmai-model-context/model_context/decoder.py`: `base64_to_image` acepta prefijo `data:`, valida y convierte a RGB. Si la imagen no es válida lanza `ValueError("La imagen Base64 no es válida.")`.
+- `pmai-model-context/model_context/local_object.py`: copia de `GlobalObjectForContext`. mai-core usa la suya en `pmai-mai-core/src/pmai_core/domain/`.
+- `pmai-model-context/model_context/__init__.py`: vacío. El import es siempre `from model_context.…`.
+
+#### 16.6 Contratos
+
+No expone NATS ni HTTP. Es una biblioteca que mai-core importa desde `/opt/model-context`, primer elemento de `PMAI_CORE_PYTHONPATH` (ver [15.7](#157-configuración) y el [Anexo B](#anexo-b-variables-de-entorno)). El [Anexo C](#anexo-c-patrones-nats) no aplica.
+
+API pública que usa mai-core:
+
+| Función | Entrada | Salida | Archivo |
+|---|---|---|---|
+| `model_context.model.import_Blip_model` | ninguna | `(processor, model)` y los deja en la caché | `pmai-model-context/model_context/model.py` |
+| `model_context.cache.get_cache` | ninguna | el diccionario de módulo | `pmai-model-context/model_context/cache.py` |
+| `model_context.context.generate_context_from_base64` | JPEG en base64, processor, model | `(contexto, prompt)` con `prompt` siempre `""`; mai-core descarta el segundo valor | `pmai-model-context/model_context/context.py` |
+
+mai-core no usa `get_quantized_blip_model`, `base64_to_image_resized`, `GlobalObjectForContext`, `context_info` ni `clear_cache`.
+
+Contratos consumidos: Hugging Face Hub, `AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base", use_fast=True)` —con reintento sin `use_fast` si da `TypeError` o `ImportError`— y `BlipForConditionalGeneration.from_pretrained`. La primera vez necesita red. No habla con ningún microservicio.
+
+#### 16.7 Configuración
+
+Todo está en constantes. No hay `.env`. El [Anexo B](#anexo-b-variables-de-entorno) no lista claves de este repositorio.
+
+| Clave | Valor | Efecto |
+|---|---|---|
+| `MODEL_ID` | `Salesforce/blip-image-captioning-base` | Variante base de BLIP, elegida por ser ligera en CPU |
+| `DEVICE` | `cpu` | Las tensores se mueven a CPU |
+| `prompt` de generación | `""` | Sin texto guía |
+| `max_length` | `88` | Tope de tokens |
+| `min_length` | `18` | Piso de tokens |
+| `num_beams` | `10` | Búsqueda por haces |
+| `repetition_penalty` | `1.4` | Penaliza repeticiones |
+| `early_stopping` | `True` | Corta cuando los haces convergen |
+| `length_penalty` | `1.05` | Ligera preferencia por frases un poco más largas |
+| `no_repeat_ngram_size` | `3` | No repite trigramas |
+| `use_cache` | `True` | Caché KV de transformers |
+| cuantización | `torch.qint8` sobre `torch.nn.Linear`, motor `qnnpack` | Disponible y cacheada; el turno usa `cache["model"]`, el modelo sin cuantizar |
+
+La generación corre bajo `torch.inference_mode()`. Después, `processor.batch_decode(..., skip_special_tokens=True)` y `clean_caption`. Pendiente de confirmar: por qué se dejó de usar la versión cuantizada en el turno; el código la conserva y el cuaderno la prueba, pero mai-core carga el modelo completo.
+
+#### 16.8 Pruebas
+
+El comando es `PYTHONPATH=. pytest` desde `pmai-model-context`. Hay una sola prueba, `pmai-model-context/tests/test_package_import.py`, que comprueba que `model_context.local_object.GlobalObjectForContext` acepta el campo `question`. Resultado registrado: 1 prueba pasa (`PYTHONPATH=. python3 -m pytest -q -p no:cacheprovider`). No hay pruebas de `clean_caption`, `generate_context` ni de la caché.
+
+#### 16.9 Trampas
+
+El paquete se llama `model_context` y no `utils` porque las dos bibliotecas se cargan en el mismo proceso de mai-core. `pmai-model-vision-language` también exporta `utils` y, con las dos rutas en `PYTHONPATH`, un segundo `utils` taparía al primero. El commit `ac2703f` (2026-10-09) renombró `utils/*` a `model_context/*`. Nunca se debe volver a importar como `utils`.
+
+`clean_caption` trabaja en dos pasadas. Primero borra, palabra a palabra, las de `SUSPICIOUS_WORDS`, salvo que estén en `PROTECTED_WORDS`. Después aplica cada patrón de `HALLUCINATION_PATTERNS` solo si el texto coincidente no contiene una palabra protegida. Al final arregla puntuación y pone mayúscula inicial. Las palabras protegidas —nunca se borran— cubren personas y animales (`robot`, `man`, `woman`, `child`, `cat`, `dog`…), objetos (`chair`, `laptop`, `camera`…), colores, tamaños y acciones (`standing`, `sitting`, `holding`…). Las sospechosas cubren adverbios de duda (`likely`, `probably`, `seems`…), `nasa`, países, restos de alucinaciones vistas en pruebas (`sebre`, `seiree`, `crochel`, `keychain`, `triumph`…) y verbos de texto leído (`says`, `reads`). Los patrones recortan palabras repetidas de cuatro letras o más, "a man"/"a woman" duplicado, verbos copulativos dobles, fechas con mes y año, cualquier año 19xx o 20xx, textos citados y nombres de ciudades tras "in".
+
+Hay tres agujeros conocidos en ese filtro. Las entradas de `SUSPICIOUS_WORDS` con espacios (por ejemplo `"le l'estrange"`) nunca coinciden, porque la comparación es palabra a palabra. Falta una coma entre `"how do i' m"` y `"crochel"`: Python concatena las dos cadenas y `crochel` no se filtra como palabra suelta. El patrón de años borra cualquier número 19xx/20xx aunque sea real.
+
+Si la precarga del arranque falla —sin red la primera vez—, la caché queda en `None` y cada turno falla en BLIP sin reintentar la carga; mai-core sigue sin contexto. La salida está en inglés a propósito: el prompt de `pmai-model-vision-language` le pide al modelo interpretarla y responder en español, y las aperturas de caché se eligen comparando ese inglés con ejemplos (ver [17.6](#176-contratos)). El `README.md` del repositorio habla de Ollama y LangChain; ninguno se usa en el paquete. Pendiente de confirmar: la latencia real de BLIP-base con 10 haces en la Jetson o el N100, y dónde queda la caché de Hugging Face dentro del contenedor.
 
 ### 17. pmai-model-vision-language
 
-<!-- pendiente: tarea 11 -->
+#### 17.1 Propósito
+
+`pmai-model-vision-language` es el modelo de acción. Recibe el objeto de la escena —quién pregunta, qué se ve y qué preguntó— más el catálogo de gestos de esa misma llamada, y devuelve la frase y hasta tres ids de gesto. Primero busca una respuesta ya guardada en Milvus Lite (`conocimiento` y, si no hay acierto, `interacciones` con coincidencia estricta). Si no encuentra nada parecido, construye el prompt de R-One y genera con OpenAI `gpt-4o-mini` cuando hay clave, o con Gemma 4 E2B en GGUF local cuando no la hay o la llamada falla.
+
+No elige a la persona, no describe la imagen, no habla y no mueve servos. Eso queda en mai-core, en el paquete de contexto y en robótica. El concepto de caché semántico está en [4.7](#47-caché-semántico), el de modelo local frente a nube en [4.8](#48-modelo-local-frente-a-modelo-en-la-nube), las colecciones en [7.2](#72-milvus-lite) y el lugar del turno en [6.3](#63-chat-por-la-ruta-complejo-el-turno). Esta ficha recorre `responder()` y el prompt.
+
+#### 17.2 Versión
+
+La versión leída es la de la tabla [Versión documentada](#versión-documentada): rama `dev`, commit `b9042c9`, fecha 2026-10-31. El paquete declara versión `0.1.0` en `pmai-model-vision-language/pyproject.toml`.
+
+#### 17.3 Tecnología
+
+Python 3.12 o superior, setuptools con los paquetes `utils*`, `models*` y `prompt*`. Las dependencias de ejecución relevantes son `pymilvus[milvus-lite]`, `sentence-transformers`, `llama-cpp-python`, `openai`, `huggingface-hub`, `python-dotenv` y `spanlp`. El extra `dev` es `pytest>=8`. Quedan además dependencias heredadas de experimentación que el turno no usa: FastAPI, Uvicorn, LangChain, Ollama, Jupyter, pandas, wikipedia-api e ibm-watsonx-ai. El bloqueo de versiones es con uv.
+
+#### 17.4 Árbol
+
+```text
+pmai-model-vision-language/
+  utils/                         # paquete importable utils
+    main.py                      # responder() y ayudas de nombre
+    config.py                    # rutas, umbrales, modelos
+    personalizacion.py           # aperturas según el contexto visual
+    encoder/                     # embeddings 384 dimensiones
+    milvus/                      # conexión, búsqueda, indexación, androide_milvus.db
+    gpt/                         # enrutador OpenAI hacia Gemma
+    gguf/                        # Gemma 4 E2B con llama-cpp-python
+    context_builder/             # siembra de conocimiento
+    webscraping/                 # primera fase hecha; segunda vacía
+    ollama/                      # cliente histórico, roto
+    stt-tts_to_test/             # pruebas sueltas históricas
+  prompt/                        # PROMPT_PRINCIPAL y detector de groserías
+  models/                        # esquema GlobalObjectForContext y carpeta gguf
+  data/                          # aperturas.json (lo único versionado de data)
+  tests/                         # pytest actual
+  test/                          # comparativa histórica de GGUF
+  docs/                          # texto académico de las secciones 2.10 a 2.12
+  app.py                         # demo Gradio, histórica
+  main.ipynb                     # cuaderno histórico
+  androide_milvus.db             # base vieja en la raíz; ningún módulo la abre
+```
+
+La organización sigue el camino de una pregunta: `utils/main.py` orquesta, `utils/milvus/` es la memoria, `prompt/` es lo que se le dice al modelo cuando la memoria no alcanza y `utils/gpt/` elige entre nube y local. `models/gguf/` guarda el archivo de Gemma, que git ignora y se descarga solo. Lo histórico queda en el árbol —Ollama, Gradio, el cuaderno, STT/TTS, la base de la raíz— para no romper clones antiguos, pero el turno no lo importa.
+
+#### 17.5 Archivos clave
+
+- `pmai-model-vision-language/utils/main.py`: `responder(obj, secuencias)`, única entrada del turno.
+- `pmai-model-vision-language/utils/config.py`: constantes y `load_dotenv(PROJECT_ROOT / ".env", override=False)`.
+- `pmai-model-vision-language/utils/milvus/busqueda.py`: `search()` en dos etapas, vectorial y textual.
+- `pmai-model-vision-language/utils/milvus/conexion.py`: cliente perezoso y creación de `conocimiento` e `interacciones`.
+- `pmai-model-vision-language/utils/milvus/indexar.py`: inserción. El docstring aún habla de ids 1–34; el código acepta cualquier entero.
+- `pmai-model-vision-language/utils/gpt/gptapi.py`: `generar_respuesta`. Si hay `OPENAI_API_KEY` intenta OpenAI; si no hay clave o la llamada lanza, Gemma.
+- `pmai-model-vision-language/utils/gguf/ggufapi.py`: descarga del GGUF, singleton, plantilla Gemma y análisis del JSON.
+- `pmai-model-vision-language/prompt/principal.py`: `PROMPT_PRINCIPAL`, `formatear_catalogo`, `construir_prompt`.
+- `pmai-model-vision-language/prompt/detector_grocerias.py`: `procesar_pregunta` con spanlp. `filtrar_pregunta`, con respuesta fija y gesto `[1]`, existe y no se llama.
+- `pmai-model-vision-language/utils/personalizacion.py`: `elegir_apertura`.
+- `pmai-model-vision-language/utils/context_builder/cargar_preguntas.py`: siembra idempotente. `pmai-model-vision-language/utils/context_builder/alimentar_basevec.py` inserta con `movimientos = [1]` por defecto.
+
+#### 17.6 Contratos
+
+No expone NATS ni HTTP en el despliegue. Es una biblioteca que mai-core importa desde `/opt/action-model` (ver [15.7](#157-configuración)). El [Anexo C](#anexo-c-patrones-nats) no aplica.
+
+| Función | Entrada | Salida | Archivo |
+|---|---|---|---|
+| `utils.main.responder` | objeto con `question`, `etiqueta`, `contexto`; lista de `getActions` | dict con `respuesta`, `movimientos`, `fuente`, `etiqueta` y, en ruta modelo, `backend` | `pmai-model-vision-language/utils/main.py` |
+| `utils.milvus.conexion.get_client` | ninguna | cliente Milvus Lite; crea las colecciones si faltan | `pmai-model-vision-language/utils/milvus/conexion.py` |
+| `utils.encoder.encoder` | import de módulo | carga `paraphrase-multilingual-MiniLM-L12-v2` | `pmai-model-vision-language/utils/encoder/encoder.py` |
+| `utils.gguf.ggufapi.precargar` | ninguna | deja Gemma en memoria | `pmai-model-vision-language/utils/gguf/ggufapi.py` |
+| `python -m utils.context_builder.cargar_preguntas` | JSON de pares | imprime `Conocimiento nuevo: <n>` | `pmai-model-vision-language/utils/context_builder/cargar_preguntas.py` |
+
+Contratos consumidos: OpenAI Chat Completions (`gpt-4o-mini`, `temperature=0.7`, `response_format=json_object`); Hugging Face Hub para el GGUF `unsloth/gemma-4-E2B-it-GGUF` / `gemma-4-E2B-it-Q4_K_M.gguf` y para el modelo de embeddings; Milvus Lite embebido; spanlp `Palabrota`. El catálogo lo produce `ROBOTICS_MS.actionService.getActions` y llega a través de mai-core.
+
+`responder()` paso a paso. El objeto de entrada, escrito como JSON para leerlo —en el código es un `GlobalObjectForContext`—, se parece a este, tomado de la situación de la [sección 3](#3-recorrido-de-una-pregunta):
+
+```json
+{
+  "id_global": "gid_3f9a1c2e",
+  "etiqueta": "Andrea Lopez",
+  "confianza": 0.91,
+  "contexto": "a woman with glasses standing in front of a robot",
+  "question": "qué es la Universidad Libre"
+}
+```
+
+El segundo argumento es la lista que devolvió `getActions` en esa llamada (`id`, `name`, `arduino_id`, `description`). Hoy esa lista suele ir vacía porque las secuencias de robótica no tienen descripción (ver [1.3](#13-qué-puede-hacer-r-one-hoy)); el ejemplo sigue con catálogo vacío, que es el caso real.
+
+1. Toma `obj.question` y la pasa por `procesar_pregunta`: spanlp censura groserías y reduce signos repetidos. Si había grosería, más adelante no se indexa.
+2. `detectar_intencion` clasifica en `saludo_social`, `identidad_universidad`, `beneficio_opinion`, `dato_especifico` o `general`. Solo cambia el umbral: 0,35 en `conocimiento`, o 0,28 si la intención es `dato_especifico`. `INTENCIONES_SOCIALES` no se usa.
+3. Arma `permitidos` con los `id` enteros del catálogo de esta llamada y pone `milvus_caido = False`. Esa bandera es interna: no viaja en el JSON de salida.
+4. Busca en `conocimiento`. Si `search` lanza, marca Milvus caído y no hay acierto. `search` tiene dos etapas: vecino más cercano por HNSW (se acepta si la distancia coseno es ≤ umbral) y un respaldo textual de hasta 1000 registros (igualdad exacta, frase contenida con al menos tres palabras, o Jaccard ≥ 0,45).
+5. Solo si no hubo acierto, busca en `interacciones` con umbral 0,40 y `solo_exacto=True`. "Coincidencia estricta" incluye que una pregunta contenga a la otra, no solo la igualdad carácter a carácter.
+6. `etiqueta` pasa por `_etiqueta_real`: si era `Persona no identificada`, `(sin nombre)` o vacío, queda `""`.
+7. Ruta caché: limpia restos de "Persona no identificada" en la respuesta guardada, elige una apertura con `elegir_apertura(obj.contexto)` y antepone nombre y apertura (`"Andrea, veo que buscas orientación. …"`). Los movimientos guardados, que en disco son texto JSON, se filtran por `permitidos` y se cortan a 3. No pasa por ningún modelo ni indexa. Sale así:
+
+```json
+{
+  "respuesta": "Andrea, la Universidad Libre es una institución de educación superior colombiana fundada en 1923.",
+  "movimientos": [],
+  "fuente": "cache",
+  "etiqueta": "Andrea Lopez"
+}
+```
+
+8. `elegir_apertura` codifica el contexto visual y lo compara por producto punto con los ejemplos de `pmai-model-vision-language/data/aperturas.json` (41 situaciones). Si la mejor similitud es ≥ 0,60 (`UMBRAL_APERTURA`) devuelve una frase al azar de esa situación, en minúscula, del estilo "veo que buscas orientación" o "veo que vienen acompañados". Cualquier error devuelve nada.
+9. Ruta modelo: `construir_prompt` rellena `PROMPT_PRINCIPAL` con la etiqueta cruda (puede ser `Persona no identificada`), el contexto o `Sin contexto visual disponible`, la pregunta y `{catalogo_movimientos}`. Ese hueco es una tabla Markdown `| id | nombre | arduino_id | descripcion |` con una fila por secuencia; sin secuencias, el texto `(No hay movimientos disponibles)`. Las llaves del formato de salida van dobles (`{{` `}}`) porque el prompt pasa por `str.format`.
+10. El prompt fija identidad (nombre R-One invariable, robot físico, español siempre, tono cálido), cinco pasos de razonamiento (persona, intención, contexto visual, movimientos, veracidad), personalización obligatoria por nombre y por escena, formato JSON `{"respuesta", "movimientos"}`, veracidad, temas delicados, defensa ante inyección y nueve ejemplos con `movimientos: []`. Los datos de esta llamada van al final.
+11. `generar_respuesta(prompt)`: si `OPENAI_API_KEY` no está vacía intenta OpenAI y marca `_backend = "openai"`; si no hay clave o la llamada lanza (sin red, 401, cuota), usa Gemma y marca `_backend = "gguf"`. El código no sondea la red: `hay_internet` existe solo para logs y no se llama. Gemma es un singleton con `n_ctx=8192`, `n_threads=os.cpu_count()`, `max_tokens=1024`, `temperature=0.3`; si la salida queda vacía, descarta la instancia y reintenta una vez.
+12. Limpia marcas sin nombre. Indexa en `interacciones` solo si Milvus no cayó, la pregunta no tenía groserías y la respuesta es almacenable (no vacía, no genérica, sin "no dispongo de ese dato"). Antes quita el nombre de la persona; si el nombre o "Persona no identificada" siguen apareciendo, no indexa. Un error al indexar se registra y no corta la respuesta.
+13. Devuelve la ruta modelo:
+
+```json
+{
+  "respuesta": "Andrea, no tengo una opinión meteorológica; si sales, un abrigo no sobra.",
+  "movimientos": [],
+  "fuente": "llm",
+  "backend": "openai",
+  "etiqueta": "Andrea Lopez"
+}
+```
+
+mai-core traduce esas claves a lo que ve la pantalla. `respuesta` pasa a `reply`. `fuente == "cache"` pasa a `caché`; `backend == "openai"` a `OpenAI`; `fuente == "llm"` o `backend == "gguf"` a `Gemma (local)`. `movimientos` deja de ser una lista de enteros y se convierte en `[{id, name}]`, conservando como máximo los tres primeros ids que existan en el catálogo de esa llamada, en el orden del modelo. El objeto que sale por NATS se parece a:
+
+```json
+{
+  "reply": "Andrea, la Universidad Libre es una institución de educación superior colombiana fundada en 1923.",
+  "fuente": "caché",
+  "movimientos": []
+}
+```
+
+Siembra de `conocimiento`. `scripts/seed-conocimiento.sh` usa `docker` o `sudo docker`: si `pmai-core` está corriendo ejecuta `python -m utils.context_builder.cargar_preguntas` con `compose exec`; si no, lanza un `compose run --rm --no-deps` de un solo uso. `cargar_preguntas.py` lee `pmai-model-vision-language/utils/webscraping/primera fase/preguntas_respuestas.json` (244 pares; 73 traen `movimientos` y 171 no), consulta hasta 16384 preguntas ya guardadas y solo inserta las que no estén con el mismo texto, de modo que es idempotente. `alimentar_basevec` valida pregunta y respuesta no vacías, toma `movimientos` o `movimiento` o, si faltan, `[1]` (`MOVIMIENTO_POR_DEFECTO = 1`), codifica en lote e inserta. De ahí que 171 pares de conocimiento ejecuten el gesto con `id == 1` el día que el catálogo vivo tenga una secuencia con ese número. `scripts/lan-up.sh` hace esta siembra en cada arranque en red local.
+
+Lo histórico, que no forma parte del turno: `pmai-model-vision-language/utils/ollama` importa `OLLAMA_MODEL` de `utils.config`, que ya no existe, y valida ids fijos 1–34. `pmai-model-vision-language/app.py` es una demo Gradio que no arranca tal cual: importa `gradio` (no está en las dependencias), lee un `movimientos.json` que no existe y usa `say`/`afconvert` de macOS. `pmai-model-vision-language/main.ipynb` importa un nombre de módulo inválido y busca una ruta de macOS. `pmai-model-vision-language/utils/stt-tts_to_test` prueba NeMo y un TTS de transformers que no están en dependencias. `pmai-model-vision-language/androide_milvus.db`, en la raíz, la creó el cuaderno de ingesta abriendo `./androide_milvus.db`; el código usa `pmai-model-vision-language/utils/milvus/androide_milvus.db`.
+
+#### 17.7 Configuración
+
+Las constantes viven en `pmai-model-vision-language/utils/config.py`. La variable que sí lee el proceso es `OPENAI_API_KEY`; el resto de nombres del [Anexo B](#anexo-b-variables-de-entorno) que parecen de Milvus no tienen efecto aquí.
+
+| Clave | Valor | Efecto |
+|---|---|---|
+| `PROJECT_ROOT` | carpeta del repositorio, `/opt/action-model` en el contenedor | Base de todas las rutas |
+| `load_dotenv(..., override=False)` | `.env` del repositorio | No pisa variables ya definidas, aunque estén vacías |
+| `MILVUS_DB_PATH` | `PROJECT_ROOT/utils/milvus/androide_milvus.db` | Constante; no lee la variable de Compose del mismo nombre |
+| `APERTURAS_PATH` | `pmai-model-vision-language/data/aperturas.json` | Situaciones de apertura |
+| `EMBED_MODEL_NAME` | `paraphrase-multilingual-MiniLM-L12-v2` | Embeddings |
+| `EMBED_DIM` | `384` | Dimensión del vector |
+| `COL_CONOCIMIENTO` / `COL_INTERACCIONES` | `conocimiento` / `interacciones` | Colecciones |
+| `UMBRAL_CONOCIMIENTO` | `0.35` | Distancia coseno máxima (menor es mejor) |
+| `UMBRAL_INTERACCIONES` | `0.40` | Distancia de la segunda colección |
+| `UMBRAL_APERTURA` | `0.60` | Similitud mínima para elegir apertura |
+| `SEARCH_PARAMS` | COSINE, `ef: 64` | Búsqueda HNSW |
+| `OPENAI_MODEL` | `gpt-4o-mini` | Modelo de nube |
+| `GGUF_HF_REPO` / `GGUF_HF_FILENAME` | `unsloth/gemma-4-E2B-it-GGUF`, `gemma-4-E2B-it-Q4_K_M.gguf` | Descarga si falta el archivo |
+| `UMBRAL_JACCARD` | `0.45` | Respaldo textual no estricto |
+| `QUERY_LIMIT_FALLBACK` | `1000` | Tope de registros cargados en memoria |
+| Gemma `n_ctx` | `8192` | Contexto |
+| Gemma `temperature` / `top_p` | `0.3` / `0.9` | Muestreo |
+
+`MOVIMIENTOS_PATH` apunta a un JSON de gestos fijos bajo `pmai-model-vision-language/data/` que no está en el árbol; solo lo usan `cargar_movimientos` y `app.py`. El ejemplo de entorno del repositorio lista además claves de Anthropic y Watson; el turno no las lee.
+
+#### 17.8 Pruebas
+
+El comando es `pytest` desde `pmai-model-vision-language` con el extra `dev`. `pmai-model-vision-language/tests/conftest.py` sustituye por simulacros `sentence_transformers`, `openai`, `pymilvus`, `spanlp` y el codificador, para no descargar modelos.
+
+`pmai-model-vision-language/tests/test_catalogo_prompt.py` cubre catálogo vacío explícito, tabla Markdown con descripción vacía, ausencia de ids fijos en el prompt y que los datos van al final. `pmai-model-vision-language/tests/test_gguf_singleton.py` cubre la descarga solo si falta y la reconstrucción única tras generación vacía. `pmai-model-vision-language/tests/test_milvus_startup.py` cubre la creación de las dos colecciones con pymilvus simulado. `pmai-model-vision-language/tests/test_openai_router.py` cubre que con clave se usa OpenAI aunque la sonda de red falle, que si OpenAI falla cae a Gemma, que sin clave va a Gemma y que `load_dotenv` usa `override=False`. `pmai-model-vision-language/tests/test_personalizacion.py` cubre aperturas, `_etiqueta_real`, `_anteponer_nombre` y las respuestas de caché. `pmai-model-vision-language/tests/test_responder_movimientos.py` cubre el máximo de 3 ids del catálogo, el fallo de Milvus que llega al modelo y no indexa, y que un fallo al indexar no bloquea la respuesta.
+
+Resultado registrado: 34 pruebas pasan (`python3 -m pytest -q -p no:cacheprovider`).
+
+#### 17.9 Trampas
+
+Importar `utils.main` carga en cascada spanlp, el codificador (descarga del modelo de embeddings la primera vez) y llama-cpp-python, porque los `import` son de nivel de módulo. `MILVUS_DB_PATH` de Compose se ignora: la base vive en el montaje del repositorio, y `data/milvus` del lanzador queda vacío. `load_dotenv(..., override=False)` no sobrescribe una variable que ya existe aunque esté vacía, y Compose siempre define `OPENAI_API_KEY`; el archivo `.env` de este repositorio, además, no está en el árbol actual.
+
+Si Gemma no puede cargar o genera vacío dos veces, devuelve "Lo siento, no puedo responder en este momento." con `_backend = "gguf"`; mai-core la muestra como `Gemma (local)`, no como `disculpa`. Esa frase no está en las listas de respuestas no almacenables, así que se indexa en `interacciones` y la misma pregunta exacta la devolvería desde la caché. Lo mismo vale para un texto no JSON que venga de OpenAI.
+
+Los ids guardados en Milvus son de catálogos anteriores. En cada llamada se filtran por el catálogo vivo, de modo que un id viejo puede desaparecer o, peor, coincidir con otra secuencia que hoy tiene ese número. El gesto por defecto `[1]` de la siembra se ejecuta el día que exista una secuencia con `id == 1`. Pendiente de confirmar: si el catálogo vivo de robótica tiene esa secuencia. Pendiente de confirmar: cuántos registros tienen hoy `conocimiento` e `interacciones` (no se abrió la base para no escribir en ella). Pendiente de confirmar: la latencia de Gemma 4 E2B Q4_K_M con `n_ctx=8192` en la Jetson y si cabe junto a BLIP y YOLO en memoria.
+
+Con catálogo vacío el prompt pide "de 1 a 3 ids" y a la vez dice que no hay movimientos; cualquier id inventado se descarta al filtrar. El README del repositorio enlaza números de línea viejos, lista un `movimientos.json` que no existe y dice que sin coincidencia "genera con OpenAI"; el código cae a Gemma. El cuaderno de ingesta usaba `UMBRAL_CONOCIMIENTO = 0.70`; el código usa 0,35.
 
 ### 18. pmai-model-vision
 
-<!-- pendiente: tarea 11 -->
+#### 18.1 Propósito
+
+`pmai-model-vision` es el repositorio de entrenamiento del detector de R-ONE: un YOLO11s afinado con Ultralytics para reconocer los rostros de 25 integrantes del semillero Prometeo, etiquetados en Label Studio. No corre en el turno ni se despliega como servicio. El producto que llega a producción es un archivo de pesos; mai-core carga una copia en `pmai-mai-core/src/pmai_core/models/my_model.pt`.
+
+Las fases 1 y 2 del documento de investigación corresponden a este repositorio. La fase 3 (BlazeFace, face_recognition, DeepFace, HandLandmarker sobre el prototipo CLAUD-IA) no está en el código. La historia completa —captura, Label Studio, limpieza, preprocesado, aumento de datos y lectura de las curvas— está en [29](#29-el-detector-de-objetos). Esta ficha deja el estado del árbol, las métricas de `train5` y qué peso usa el núcleo.
+
+#### 18.2 Versión
+
+La versión leída es la de la tabla [Versión documentada](#versión-documentada): rama `dev`, commit `5bbccd6`, fecha 2026-08-27. En el disco local la carpeta pertenece a `root`.
+
+#### 18.3 Tecnología
+
+Python 3.13 en un entorno Conda llamado `fede-model-env1`. No hay `pyproject.toml`; las dependencias están congeladas en `pmai-model-vision/requirements.txt`, exportado de Conda: Ultralytics 8.3.221, torch 2.7.1+cu118, torchvision 0.22.1+cu118, opencv-python 4.12.0.88. Las corridas 4 y 5 se entrenaron en una NVIDIA GeForce GTX 1050 Ti de 4 GB. El etiquetado se hizo con Label Studio en Docker (`heartexlabs/label-studio:latest`) montando `pmai-model-vision/mydata`. El README muestra una insignia "YOLOv8"; los pesos base reales son `pmai-model-vision/yolo11s.pt`, como declara `pmai-model-vision/runs/detect/train5/args.yaml`.
+
+#### 18.4 Árbol
+
+```text
+pmai-model-vision/
+  main.ipynb                 # punta a punta: unir, limpiar, preprocesar, entrenar, exportar
+  data.yaml                  # 25 clases y rutas del dataset preprocesado
+  utils/                     # merge, split, limpieza, preprocesado, análisis, inferencia
+  mydata/                    # SQLite y medios de Label Studio, exportaciones JSON
+  dataset/                   # solo no_borrar.txt; aquí se descomprimen data.zip y set.zip
+  runs/detect/               # cinco corridas, train a train5, con args, results.csv y pesos
+  my_model/                  # pesos exportados: my_model.pt, full_model.pt, persons_model.pt, base_model.pt
+  yolo11n.pt                 # peso COCO genérico; no es el detector de R-ONE
+  yolo11s.pt                 # peso base de las corridas finales
+```
+
+Es un repositorio de laboratorio, no de servicio: el cuaderno es el punto de entrada, `utils/` son scripts que el cuaderno invoca y `runs/` es el archivo de las corridas. `my_model/` es el estante de pesos "listos para copiar" hacia mai-core. La carpeta `data_preprocessed` que cita `data.yaml` no se conserva en el árbol.
+
+#### 18.5 Archivos clave
+
+- `pmai-model-vision/main.ipynb`: celda 6 descomprime `dataset/data.zip` y, si existe, `dataset/set.zip`; celda 8 une con `merge_datasets` (`--train_pct 0.9 --include_test`); celda 11 crea `data.yaml`; celda 16 limpia; celda 18 analiza; celda 19 preprocesa; celda 20 entrena; celda 23 predice sobre validación con `train5/weights/best.pt`; celda 27 copia ese `best.pt` a `pmai-model-vision/my_model/my_model.pt`.
+- `pmai-model-vision/data.yaml`: `path: data_preprocessed`, `nc: 25` y los 25 nombres, con acentos en escapes YAML.
+- `pmai-model-vision/utils/data_cleaning.py`: borra imágenes sin etiqueta, etiquetas corruptas, imágenes corruptas y duplicados por hash.
+- `pmai-model-vision/utils/data_preprocess.py`: balance de blancos en LAB, CLAHE (`clipLimit=2.0`, cuadrícula 8×8) y gamma 1.0. El letterbox a 512 está comentado.
+- `pmai-model-vision/utils/merge_datasets.py`: une `set` y `custom_data` sin choques de nombre, remapeando ids de clase.
+- `pmai-model-vision/utils/yolo_detect.py`: inferencia de prueba con `--model`, `--source` (imagen, carpeta, video, `usbN`), `--thresh` y `--record`.
+- `pmai-model-vision/runs/detect/train5/results.csv`: métricas por época de la corrida en producción.
+- `pmai-model-vision/my_model/my_model.pt`: peso que se copia a mai-core.
+
+#### 18.6 Contratos
+
+Ninguno en tiempo de ejecución: no hay servicio, NATS ni HTTP. El [Anexo C](#anexo-c-patrones-nats) no aplica. El único producto que consume otro repositorio es `pmai-model-vision/my_model/my_model.pt`, copiado a mano como `pmai-mai-core/src/pmai_core/models/my_model.pt` (mismo md5 `f35b4d6bdf30ba9a6384f822b120ae9f`). mai-core lo carga con `YOLO(model_path, task="detect")` y toma los nombres de clase del propio peso (`pmai-mai-core/settings.toml`, clave `vision.model_path`).
+
+Contratos consumidos: Ultralytics usa los pesos base `pmai-model-vision/yolo11s.pt`. Label Studio dejó las exportaciones JSON de los proyectos 3 y 4 en `pmai-model-vision/mydata/export`.
+
+#### 18.7 Configuración
+
+No hay variables de entorno de servicio. El [Anexo B](#anexo-b-variables-de-entorno) no lista claves de este repositorio. La configuración del dataset y del entrenamiento final está en archivos.
+
+Las 25 clases, índices 0 a 24, son nombres de integrantes del semillero:
+
+| Índice | Clase | Índice | Clase |
+|---|---|---|---|
+| 0 | Alison Segura | 13 | Johel Arias |
+| 1 | Alison Tinoco | 14 | Juan Toro |
+| 2 | Andrea Lopez | 15 | Karol Zubieta |
+| 3 | Anyi Becerra | 16 | Laura Barón |
+| 4 | Ashly Aguirre | 17 | Laura Perez |
+| 5 | Brayan Gomez | 18 | Marcela Cifuentes |
+| 6 | Breiner Bonilla | 19 | Mauricio Alonso |
+| 7 | Carlos Ángulo | 20 | Pablo Carreño |
+| 8 | Cristhian Tapiero | 21 | Rodrigo Castro |
+| 9 | Daniela Fierro | 22 | Sara Cárdenas |
+| 10 | Diego Patiño | 23 | Valery Guerrero |
+| 11 | Evelin Sanchez | 24 | Valery Guzman |
+| 12 | Jeferson Castellanos |  |  |
+
+Hiperparámetros de `train5` (los mismos en `train4`), tomados de `pmai-model-vision/runs/detect/train5/args.yaml` y de la celda 20: `model: yolo11s.pt`, `pretrained: true`, `epochs: 60`, `patience: 100`, `batch: 16`, `imgsz: 640`, `optimizer: auto`, `seed: 0`, `amp: true`, `close_mosaic: 10`, `lr0: 0.01`, `lrf: 0.01`. Aumento: `hsv_h=0.015`, `hsv_s=0.7`, `hsv_v=0.4`, `degrees=5.0`, `translate=0.10`, `scale=0.50`, `shear=1.5`, `mixup=0.10`, `erasing=0.4`, `fliplr=0.5`, `mosaic=1.0`. Las corridas `train` a `train3` usaron `degrees: 0.0` y `mixup: 0.0`, y `train` tuvo 40 épocas. `train` a `train3` se entrenaron en Windows; `train4` y `train5` en Linux bajo la ruta antigua `pmai-launcher`.
+
+#### 18.8 Pruebas
+
+No hay pruebas automáticas ni comando de pytest. La validación es la de Ultralytics al final de cada época y la predicción visual de la celda 23 sobre `validation/images` con `conf=0.25`. En la investigación no se ejecutó nada: no hay entorno Conda ni GPU en la sesión.
+
+Las métricas de la última fila de cada `results.csv` (precisión, recall, mAP50, mAP50-95):
+
+| Corrida | Épocas | Precisión | Recall | mAP50 | mAP50-95 | Peso exportado |
+|---|---|---|---|---|---|---|
+| `train` | 40 | 0.823 | 0.967 | 0.907 | 0.782 | `full_model.pt` (9 clases, 2025-10-30) |
+| `train2` | 60 | 0.783 | 0.958 | 0.995 | 0.816 | `persons_model.pt` (9 clases, 2025-10-30) |
+| `train3` | 60 | 0.813 | 0.958 | 0.984 | 0.824 | `base_model.pt` (9 clases, 2025-11-01) |
+| `train4` | 60 | 0.875 | 0.796 | 0.867 | 0.520 | ninguno |
+| `train5` | 60 | 0.884 | 0.932 | 0.944 | 0.654 | `my_model.pt` (25 clases, 2026-05-01) |
+
+La última fila de `pmai-model-vision/runs/detect/train5/results.csv` (época 60) es precisión 0.88436, recall 0.93229, mAP50 0.94407, mAP50-95 0.65381. Con la fórmula de aptitud de Ultralytics (0,1 · mAP50 + 0,9 · mAP50-95), la mejor época de `train5` sería la 29 (0.922, 0.939, 0.978, 0.697). `pmai-model-vision/runs/detect/train5/weights/best.pt` guarda esa época, no la última, y es el archivo que la celda 27 copia a `my_model.pt`. mai-core usa esa copia.
+
+Esas cifras no coinciden con las de la memoria académica ni con `docs/project-docs/model-vision-project.md`, que reportan precisión 0.8486, recall 0.9474, mAP50 0.9942 y mAP50-95 0.8677. Tampoco coinciden con la última fila ni con la mejor época de ninguna de las cinco corridas. Las conclusiones narrativas de ese documento (precisión ≈ 0,82, recall ≈ 0,96, mAP50 ≈ 0,90, mAP50-95 ≈ 0,78 "a lo largo de las 60 épocas") se parecen a la corrida `train` de 40 épocas y 9 clases, no al modelo de 25 clases en producción. Pendiente de confirmar: de dónde salen las métricas de la memoria. Este documento sigue al `results.csv` de `train5`.
+
+#### 18.9 Trampas
+
+El detector reconoce personas concretas por su cara, no "personas" genéricas. La etiqueta que llega al turno es un nombre propio y `pmai-model-vision-language` la usa para saludar. Alguien que no esté entre las 25 clases no se detecta, o se detecta como otro integrante. El entrenamiento usa imágenes con balance de blancos y CLAHE (`data.yaml` apunta a `data_preprocessed`), pero mai-core detecta sobre el cuadro crudo de la cámara, sin ese preprocesado (`pmai-mai-core/src/pmai_core/resources/vision/detector.py`). Además, mai-core usa umbral 0,5 y la prueba del cuaderno usa 0,25.
+
+El peso se copia a mano entre repositorios; nada comprueba que las dos copias sigan siendo iguales. Hay datos personales versionados: fotos y videos de integrantes en `pmai-model-vision/mydata/media` y la base `pmai-model-vision/mydata/label_studio.sqlite3`. Las clases con muy pocos ejemplos (Rodrigo Castro con 5 etiquetas, Cristhian Tapiero con 6, Mauricio Alonso con 10) y Breiner Bonilla sin validación hacen que sus métricas por clase sean poco fiables. `pmai-model-vision/yolo11n.pt` y `pmai-model-vision/yolo11s.pt` son pesos COCO genéricos (80 clases, `person` incluida); no son el detector de R-ONE.
+
+Pendiente de confirmar: el total de 802 imágenes y la partición 80/10/10 del documento de investigación; la última exportación tiene 798 tareas y el cuaderno partió 90/10 más un test opcional. Pendiente de confirmar: el número exacto de imágenes por partición del entrenamiento final (el cuaderno registra 830 y 115 etiquetas, no imágenes) y el contenido de `set.zip`, que no está en el repositorio.
 
 ### 19. pmas-web-motion-studio
 
-<!-- pendiente: tarea 11 -->
+#### 19.1 Propósito
+
+`pmas-web-motion-studio` es el editor web de secuencias de movimiento de R-ONE: una línea de tiempo con bloques por servo, dos pistas (gesto y neutro) y un diálogo que guarda nombre, descripción, categoría y Arduino. Funciona en dos modos. En **Suelto**, sin sesión, guarda JSON de origen en su propio disco y no mueve nada: sirve para que un estudiante diseñe en un portátil. En **Acoplado**, incrustado en `pmas-web-main`, recibe el JWT por `postMessage` y guarda, lista, reproduce y detiene a través del gateway hacia `pba-ms-robotics`.
+
+No asigna `id` ni escribe el JSON canónico: eso lo hace robótica al ingerir. No habla con el Arduino directamente. El flujo de creación e ingesta está en [6.7](#67-creación-e-ingesta-de-una-secuencia); el par normal y neutro, en [4.9](#49-secuencias-bloques-y-el-par-normal-y-neutro).
+
+#### 19.2 Versión
+
+La versión leída es la de la tabla [Versión documentada](#versión-documentada): rama `dev`, commit `259451a`, fecha 2026-10-17.
+
+#### 19.3 Tecnología
+
+Python 3.11 o superior; la imagen es `python:3.13-slim`. FastAPI, Uvicorn y `python-multipart`. La interfaz es estática, sin framework ni empaquetador: `index.html`, `editor.js` (887 líneas), `library-view.js` (módulo UMD también usable desde Node) y `editor.css`. Las fuentes Space Grotesk, Inter y Material Symbols se cargan desde Google. El desarrollo usa `pytest` y `httpx`. Existe además `pmas-web-motion-studio/interfaz_record9_5_1.py`, una herramienta de escritorio en PyQt5 con `pyserial` y `openai`, que no figura en las dependencias del paquete.
+
+#### 19.4 Árbol
+
+```text
+pmas-web-motion-studio/
+  src/
+    app.py                 # FastAPI: editor y almacén local
+    local_sequences.py     # JSON de origen en disco (modo Suelto)
+    neutro.py              # generador de neutro en Python; solo lo usan las pruebas
+    static/                # index.html, editor.js, library-view.js, editor.css
+  data/sequences/          # almacén Suelto, ignorado por git salvo .gitkeep
+  tests/                   # pytest y una prueba Node de library-view.js
+  interfaz_record9_5_1.py  # grabador de escritorio histórico
+  start-studio.bat         # arranque Suelto en Windows
+  Dockerfile.dev           # imagen para Compose
+```
+
+El servidor es deliberadamente pequeño: cuatro rutas y una carpeta estática. Toda la lógica de edición, acoplamiento y neutro vive en el navegador (`editor.js`). La versión Python del neutro existe para poder probar el algoritmo sin abrir el navegador; `app.py` no la importa.
+
+#### 19.5 Archivos clave
+
+- `pmas-web-motion-studio/src/app.py`: monta `/static` y define `GET /`, listado, lectura y guardado local.
+- `pmas-web-motion-studio/src/static/editor.js`: estado de la línea de tiempo, `postMessage`, generación del neutro, guardado, reproducción y biblioteca.
+- `pmas-web-motion-studio/src/static/index.html`: barra de acciones, pistas, biblioteca, inspector y diálogo de guardado. El comentario de diseño fija cromo azul marino `#0B2540`, papel frío `#eef2f6` y neutro en esmeralda.
+- `pmas-web-motion-studio/src/static/library-view.js`: agrupación por categoría, tarjetas, chip del Arduino y la advertencia del neutro.
+- `pmas-web-motion-studio/src/local_sequences.py`: normalización y validación del JSON de origen.
+- `pmas-web-motion-studio/src/neutro.py`: `generate_neutro`, equivalente a `generateNeutroFrom` en JS.
+- `pmas-web-motion-studio/interfaz_record9_5_1.py`: grabador histórico que habla con el Arduino a 115200 baudios.
+
+#### 19.6 Contratos
+
+Endpoints FastAPI del propio estudio. No hay CORS ni autenticación: las llama el editor con rutas relativas. El [Anexo C](#anexo-c-patrones-nats) cubre los sujetos de robótica a los que llega el modo Acoplado, no estas rutas.
+
+| Método y ruta | Entrada | Salida | Archivo |
+|---|---|---|---|
+| `GET /` | sin cuerpo | `index.html` | `pmas-web-motion-studio/src/app.py` |
+| `GET /static/...` | sin cuerpo | archivos de `pmas-web-motion-studio/src/static` | `pmas-web-motion-studio/src/app.py` |
+| `GET /local/sequences` | sin cuerpo | `{total, data: [{name, description, file_name}]}` | `pmas-web-motion-studio/src/app.py` |
+| `GET /local/sequences/{name}` | nombre con subcarpetas | JSON de origen normalizado; 404/400 | `pmas-web-motion-studio/src/app.py` |
+| `POST /local/sequences` | `{sequence, overwrite?}` | el JSON guardado; 400 o 409 | `pmas-web-motion-studio/src/app.py` |
+
+No hay rutas para reproducir ni para Arduino en el estudio: en Suelto, Play solo anima el cabezal.
+
+Protocolo `postMessage` con Angular. El estudio se considera incrustado si `window.self !== window.top` o si la URL trae `?embed`. Angular lo carga en un `iframe` con `${MOTION_STUDIO_URL}/?embed=1`, donde `MOTION_STUDIO_URL` es `http://<hostname>:4210` (`pmas-web-main/src/app/core/constants/motion-studio.ts`). Al cargar, o cuando el estudio publica `{type: "prometeo-auth-request"}`, Angular responde `{type: "prometeo-auth", token, gatewayUrl, activeRole}` con `targetOrigin = MOTION_STUDIO_URL`. El estudio acepta el mensaje solo si el `hostname` del origen coincide con el suyo y si trae `token` y `gatewayUrl`. Sin `activeRole` queda en Suelto con el mensaje "Falta el rol activo; se usa el disco local". Con los tres datos pasa a Acoplado. Ante un 401 borra el token, muestra "Suelto: no hay sesión" y vuelve a pedir autenticación como mucho cada 2 s.
+
+Contratos consumidos en Acoplado. Todas las llamadas van a `gatewayUrl` con `Authorization: Bearer <token>`, `Content-Type: application/json` y, si hay rol, `X-Active-Role`.
+
+| Llamada del estudio | Ruta del gateway | Sujeto NATS | Archivo |
+|---|---|---|---|
+| Listar biblioteca | `GET /sequence/files` | `ROBOTICS_MS.sequenceService.listSequences` | `pmas-web-motion-studio/src/static/editor.js` |
+| Abrir secuencia | `GET /sequence/file?name=…` | `ROBOTICS_MS.sequenceService.getSequence` | `pmas-web-motion-studio/src/static/editor.js` |
+| Guardar | `POST /sequence/file` `{sequence, overwrite}` | `ROBOTICS_MS.sequenceService.saveSequence` | `pmas-web-motion-studio/src/static/editor.js` |
+| Play | `POST /sequence/play` `{mode, source: "estudio", blocks}` | `ROBOTICS_MS.sequenceService.startPlayback` | `pmas-web-motion-studio/src/static/editor.js` |
+| Stop | `POST /sequence/stop` | `ROBOTICS_MS.sequenceService.stopPlayback` | `pmas-web-motion-studio/src/static/editor.js` |
+| Chip del Arduino, cada 5 s | `GET /sequence/arduinos` | `ROBOTICS_MS.sequenceService.listArduinos` | `pmas-web-motion-studio/src/static/editor.js` |
+
+Grabación del par normal y neutro. El operador crea bloques en la pista Gesto (Agregar propone la siguiente pareja libre de PCA 0–2 y servo 0–15, `inicio 0`, `dur 2`, `pos 500`, `vel 5`). Cambia a la pista Neutro y la llena a mano o pulsa "Generar neutro". Guardar abre un diálogo con nombre, descripción (`minlength="10"`, `maxlength="280"`, "Para el prompt del turno"), categoría (`cara`, `cuello`, `brazo_derecho`, `brazo_izquierdo`, `torso`, `cadera`) y Arduino. `confirmSave` exige las dos pistas con bloques. En Suelto hace `POST /local/sequences`; en Acoplado, `POST /sequence/file`. Robótica asigna `id = max+1` y escribe el JSON canónico; desde ese momento la secuencia entra en `getActions` si la descripción tiene diez o más caracteres.
+
+El neutro "rebobinado" recorre el gesto hacia atrás en el tiempo: lo último que se movió es lo primero que vuelve. Se ordenan los bloques del gesto por `inicio`; para cada uno se crea un deshacer con la posición anterior de ese mismo servo, o `0` si es su primer movimiento; el `inicio` se refleja como `t_end - (inicio + dur)`. La prueba fija el ejemplo: `[0,0,0.0,1,200]` y `[0,0,1.0,0.5,400]` generan `[0,0,0.0,0.5,200]` y `[0,0,0.5,1,0]`. La interfaz muestra fija la advertencia "El neutro generado debe revisarlo una persona. En el androide no es fiable.", porque esa posición `0` es un extremo del rango PWM, no la postura de reposo física.
+
+#### 19.7 Configuración
+
+| Variable | Valor | Efecto |
+|---|---|---|
+| `MOTION_STUDIO_PORT` | `4210` | Puerto de Uvicorn en Compose y en `start-studio.bat` |
+| `PORT` | el de Compose | Nadie en el código del estudio la lee |
+| `MOTION_STUDIO_DATA_DIR` | `pmas-web-motion-studio/data/sequences` | Almacén del modo Suelto |
+| `MOTION_STUDIO_URL` | `http://<hostname>:4210` | Fija en Angular; si cambia el puerto del `.env`, Angular no se entera |
+
+Compose monta el repositorio en `/usr/src/app` y arranca `uvicorn src.app:app --host 0.0.0.0 --port ${MOTION_STUDIO_PORT} --reload`. Las versiones de CSS y JS se fuerzan con `?v=2026-10-17-ard` para romper la caché. El resto de variables relacionadas está en el [Anexo B](#anexo-b-variables-de-entorno).
+
+#### 19.8 Pruebas
+
+Python: `python -m pytest -q` desde `pmas-web-motion-studio` (`testpaths = ["tests"]`, `pythonpath = ["."]`). Resultado registrado, con el intérprete de `pba-ms-robotics/.venv` y `-p no:cacheprovider`: 20 aprobadas en 0,94 s. Cubren el diálogo (nombre, descripción con `minlength="10"`, categoría, Arduino y el orden de la barra), el almacén local (lista vacía, duplicado, overwrite, escape de ruta, descripción corta rechazada y de 10 aceptada), el rebobinado del neutro y los colores del lienzo.
+
+Node: `node --test tests/library-view.test.cjs` → 6 pruebas aprobadas (agrupación, tarjetas, chip del Arduino y texto de la advertencia).
+
+#### 19.9 Trampas
+
+El README del repositorio está desactualizado. Dice que la descripción admite 0–280 caracteres y su ejemplo de JSON de origen no trae `category` ni `blocks_neutro`. El código exige descripción de al menos diez caracteres, categoría y neutro (`pmas-web-motion-studio/src/local_sequences.py`). Manda el código.
+
+El neutro generado lleva a `pos 0` cada servo en su primer movimiento; hay que revisarlo a mano antes de guardar. El campo Arduino del diálogo se aplica a todos los bloques: no se puede mezclar Arduinos en una misma secuencia desde el estudio. El inspector permite `pca` hasta 10, Agregar solo propone 0–2 y el firmware vigente solo acepta 0–3 (ver [20.6](#206-contratos)). Al mover un bloque a la fila de otro servo se intercambian `pca`/`servo` y se renombran ambos a `P<pca>_S<servo>`, perdiendo nombres como `rot_cuello`. El chip del Arduino consulta `GET /sequence/arduinos` cada 5 s, lo que en robótica ejecuta `sync_connections` mientras `/sequences` esté abierta. En Acoplado, un error al listar deja la biblioteca vacía en lugar de caer al disco. Stop llama a `POST /sequence/stop` si hay token, aunque el estudio esté en Suelto por falta de rol. Las fuentes vienen de Google: sin internet la interfaz se ve con tipografías de sistema.
+
+`pmas-web-motion-studio/interfaz_record9_5_1.py` se considera histórica: el README no la menciona, sus dependencias no están en `pyproject.toml` y guarda listas de 7-tuplas sin nombre, descripción, categoría ni neutro, el formato de `pba-arduino-codes/sequences`. Pendiente de confirmar: si todavía se usa en el laboratorio. Pendiente de confirmar: si las 31 secuencias sin descripción de robótica entraron por la importación legada de Angular, que no exige descripción; en ese caso hay que abrirlas en el estudio y volver a guardarlas con descripción para que el turno las use.
 
 ### 20. pba-arduino-codes
 
-<!-- pendiente: tarea 11 -->
+#### 20.1 Propósito
+
+`pba-arduino-codes` es el firmware de los Arduino que mueven los servos de R-ONE a través de placas PCA9685 por I2C, más un juego de secuencias de prueba en el formato antiguo del grabador de escritorio. Recibe comandos de texto por USB serie desde `pba-ms-robotics`. En la versión vigente no conoce secuencias, tiempos ni gestos con nombre: solo "lleva el servo X de la PCA Y a la posición Z con velocidad V".
+
+No forma parte del turno de conversación —`AGENTS.md` lo excluye— y no tiene pruebas automáticas. El ciclo de un gesto, del lado de robótica, está en [6.5](#65-ciclo-de-un-gesto); esta ficha documenta lo que entiende la placa. El repositorio no es un submódulo del lanzador: vive clonado en `docs/project-docs/.work/pba-arduino-codes` y en este documento se cita como `pba-arduino-codes/<ruta>`.
+
+#### 20.2 Versión
+
+La versión leída es la de la tabla [Versión documentada](#versión-documentada): rama `dev`, commit `2e9454f`, fecha 2026-04-14, mensaje "Enhance gesture command functions and optimize PWM settings". El historial tiene 15 commits entre el 2026-03-29 y el 2026-04-14; el último toca solo `pba-arduino-codes/Inmoov_control2.ino`.
+
+#### 20.3 Tecnología
+
+Sketches Arduino en C++ (`.ino`), sin PlatformIO, Makefile ni archivo de placa en el repositorio. Bibliotecas: `Wire.h` (I2C) y `Adafruit_PWMServoDriver.h`. El encabezado de la versión vigente declara "Control 4x PCA9685 + Arduino Mega", con DS5160 a 7 V en las PCA 0–2 y SG90 a 5 V en la PCA 3. Los otros sketches no nombran la placa. No hay README. Pendiente de confirmar: la placa exacta (Mega 2560 u otra); solo el comentario de `pba-arduino-codes/Inmoov_control2.ino` la nombra. Pendiente de confirmar: qué sketch está cargado hoy en cada Arduino del androide.
+
+#### 20.4 Árbol
+
+```text
+pba-arduino-codes/
+  Inmoov_control2.ino     # firmware vigente: cuatro PCA, PCA,/SCAN/CENTER, 115200
+  Inmoov_control.ino      # versión anterior del mismo protocolo, un solo rango PWM
+  head/
+    main.ino              # histórico de solo la cabeza: gestos por número a 9600
+    test.ino              # escáner I2C a 9600
+  sequences/
+    head/                 # 22 secuencias de cara en 7-tuplas del grabador
+    torso/                # 3 secuencias de brazos y manos, mismo formato
+```
+
+Hay un sketch vigente y dos capas de historia. `Inmoov_control2.ino` es el último commit y el único con `CENTER`, rangos por tipo de servo y temporizador no bloqueante; su protocolo es el que envía robótica. `Inmoov_control.ino` habla el mismo `PCA,…`/`SCAN` pero con un único rango y `delay(10)` bloqueante. `head/main.ino` es la etapa en que solo existía la cabeza y el catálogo de gestos salía del firmware; robótica ya no lo usa para el catálogo. Las secuencias de `sequences/` son material del grabador de escritorio, sin `id`, categoría, descripción ni neutro.
+
+#### 20.5 Archivos clave
+
+- `pba-arduino-codes/Inmoov_control2.ino`: punto de entrada vigente. `setup()` abre serie a 115200, inicia I2C a 100 kHz, escanea las cuatro direcciones, inicializa a 50 Hz solo las PCA presentes, centra todos los servos y reporta `PCAS:`. `loop()` alterna `leerSerial()` y `actualizarServos()`.
+- `pba-arduino-codes/Inmoov_control.ino`: la misma idea sin `CENTER`, sin rangos por tipo y con `delay(10)` al final de `actualizarServos()`.
+- `pba-arduino-codes/head/main.ino`: tabla de comandos numerados sobre una sola PCA en `0x43`, menú por número a 9600 baudios.
+- `pba-arduino-codes/head/test.ino`: escaneo de direcciones I2C 1–126 cada 3 s, a 9600 baudios. Herramienta manual para comprobar que las cuatro PCA responden en `0x40`–`0x43`.
+
+#### 20.6 Contratos
+
+El contrato del firmware es su protocolo de texto por USB serie. Cada comando es una línea terminada en `\n`; el Arduino la lee con `Serial.readStringUntil('\n')` y le aplica `trim()`. El [Anexo C](#anexo-c-patrones-nats) no aplica: no hay NATS. Quién envía cada línea está en [6.5](#65-ciclo-de-un-gesto) y en la ficha de robótica.
+
+Firmware vigente, `pba-arduino-codes/Inmoov_control2.ino`, a 115200 baudios:
+
+| Comando | Efecto | Respuesta |
+|---|---|---|
+| `PCA,<pca>,<servo>,<pos>,<vel>` | Si `pca` 0–3, `servo` 0–15, `pos` 0–1000 y `vel` 1–10, fija objetivo y velocidad | ninguna |
+| `SCAN` | Vuelve a sondear `0x40`–`0x43` | una línea `PCAS:<índices separados por coma>` |
+| `CENTER` | Lleva todos los canales de las PCA presentes al centro de su rango, de golpe | ninguna |
+| al arrancar | Centra todo | `PCAS:<índices>` |
+
+Un comando de movimiento concreto: `PCA,0,1,420,6` seguido de salto de línea. Significa PCA 0, canal 1, posición 420 de 1000, velocidad 6. Se parsea con `sscanf(cmd.c_str(), "PCA,%d,%d,%d,%d", …) == 4`; cualquier línea que no encaje o quede fuera de rango se ignora en silencio. Un escaneo con las cuatro placas presentes responde `PCAS:0,1,2,3`; si no hay ninguna, `PCAS:` sin números.
+
+La interpolación es local al firmware. Cada servo guarda `actual`, `target` y `speed`, inicializados en 307 ticks (≈1,5 ms) y velocidad 5. Cada 10 ms (`SERVO_INTERVAL_MS`, temporizador con `millis()`, no bloqueante) cada servo de una PCA presente avanza `max(1, vel)` ticks hacia su objetivo si la diferencia supera 2 ticks, y se escribe `setPWM(canal, 0, actual)`. Dicho de otro modo, `vel` es "ticks por cada 10 ms": a `vel = 5` un recorrido completo de un DS5160 (205→450, 245 ticks) tarda unos 0,5 s, y de un SG90 (150→600, 450 ticks) unos 0,9 s. El campo `dur` de las secuencias no llega al Arduino: el tiempo lo marca robótica, que espera un segundo entre el paso normal y el neutro.
+
+Rangos PWM a 50 Hz, con la fórmula documentada `ticks = (ms / 20 ms) × 4096`. DS5160 (PCA 0, 1 y 2): `SERVOMIN_DS 205` (≈1,0 ms) a `SERVOMAX_DS 450` (≈2,2 ms), con la nota de subir de 10 en 10 si el brazo no llega, máximo ≈500. SG90 (PCA 3): `SERVOMIN_SG 150` (≈0,73 ms) a `SERVOMAX_SG 600` (≈2,93 ms). La conversión es `map(pos, 0, 1000, MIN, MAX)` según la PCA. No hay límites de ángulo por articulación: el único tope es ese rango PWM y la validación `pos` 0–1000.
+
+Mapa de canales. Direcciones I2C: PCA 0 = `0x40`, PCA 1 = `0x41`, PCA 2 = `0x42`, PCA 3 = `0x43`. El encabezado del firmware y el uso real en las secuencias de robótica no coinciden en las placas 0 y 2:
+
+| PCA | Dirección | Encabezado de `Inmoov_control2.ino` | Uso en `pba-ms-robotics/data/sequences` |
+|---|---|---|---|
+| 0 | `0x40` | Brazo derecho, 10 × DS5160 | Torso y cuello: 0 `rot_torso`, 1 `rot_cuello`, 2 `cuello_arr_abj`, 3 `incl_cuello`, 4 `mandibula` |
+| 1 | `0x41` | Brazo izquierdo, 10 × DS5160 | Brazo izquierdo: 0 `menique`, 1 `anular`, 2 `corazon`, 4 `indice`, 5 `pulgar`, 6 `muneca`, 12 `antebrazo`, 13 `rotacion_brazo`, 14 `extension`, 15 `abduccion` |
+| 2 | `0x42` | Torso y cuello, 6 × DS5160 | Brazo derecho: 0 `menique_der`, 1 `anular_der`, 2 `corazon_der`, 3 `indice_der`, 4 `pulgar_der`, 5 `muneca_der`, 6 `antebrazo_der`, 13 `rotacion_der`, 14 `extension_der`, 15 `abduccion_der` |
+| 3 | `0x43` | Cabeza, 14 × SG90 | Cara: 4 `mejilla_izq`, 6 `labio_sup`, 8 `ceja_izq`, 11 `ceja_der`, 12 `parp_inf_izq`, 13 `parp_sup_izq`, 14 `parp_inf_der`, 15 `parp_sup_der` |
+
+Pendiente de confirmar: el cableado real de las PCA 0 y 2. Si el comentario está desactualizado, también lo está la asignación de rangos (la mandíbula en la PCA 0 usaría el rango DS5160, coherente con un servo grande; si el comentario tuviera razón, esa mandíbula estaría en la PCA 2).
+
+Correspondencia con robótica. Al abrir `/dev/ttyACM*` o `/dev/ttyUSB*` a 115200 el Arduino se reinicia, centra y emite `PCAS:`; robótica espera 1,8 s y descarta esa línea. Por cada bloque escribe `PCA,<pca>,<servo>,<pos>,<vel>\n` cuando vence su `inicio`. Para el panel de PCA escribe `SCAN\n` y lee `PCAS:`. `CENTER` no se envía nunca desde robótica. Un `executeAction` con un id que no está en el almacén manda `<id>\n`, que el firmware vigente ignora.
+
+`pba-arduino-codes/head/main.ino` es otro contrato, histórico. 9600 baudios. `loop()` lee un entero; la tabla va de `-1` "Listar comandos" a 13 "Ojo Izquierdo", con gestos como Sorprendido, Furioso, Feliz, Parpadeo, guiños, Dormir, Sospechoso, Risa (no mueve nada), Triste y Despertar. `-1` responde un bloque JSON entre `JSON_BEGIN` y `JSON_END`. El modo manual acepta pares `<canal> <pasos>` (0–15, 0–1023) hasta recibir `-1`. Si se carga en una placa conectada a robótica, `PCA,…` y `SCAN` no funcionan.
+
+Contratos consumidos: ninguno. El firmware solo lee la línea serie y escribe al bus I2C.
+
+#### 20.7 Configuración
+
+Todo está en constantes de compilación. No hay EEPROM ni parámetros por serie. El [Anexo B](#anexo-b-variables-de-entorno) no lista claves de este repositorio.
+
+| Constante | Valor | Efecto |
+|---|---|---|
+| Baudios | 115200 | Debe coincidir con robótica |
+| Reloj I2C | 100000 Hz | El comentario dice "modo fast"; 100 kHz es el modo estándar, el rápido es 400 kHz |
+| Frecuencia PWM | 50 Hz | Periodo de 20 ms |
+| `SERVOMIN_DS` / `SERVOMAX_DS` | 205 / 450 | Rango DS5160; 450 es menor que el ≈500 que el propio comentario sugiere |
+| `SERVOMIN_SG` / `SERVOMAX_SG` | 150 / 600 | Rango SG90 |
+| `SERVO_INTERVAL_MS` | 10 | Paso de interpolación |
+| Direcciones PCA | `0x40`, `0x41`, `0x42`, `0x43` | PCA 0 a 3 |
+
+#### 20.8 Pruebas
+
+No hay pruebas automáticas ni script de compilación. `pba-arduino-codes/head/test.ino` es una herramienta manual de diagnóstico I2C. En la investigación no se compiló ni se cargó ningún sketch.
+
+#### 20.9 Trampas
+
+Robótica y el gateway aceptan `pca` 0–10, pero el firmware solo procesa 0–3 y descarta el resto sin responder. Un bloque con `pca` 4 o más se "envía" con éxito y no mueve nada. No hay acuse de recibo de `PCA,…`: robótica no puede saber si un comando fue rechazado por rango o por PCA ausente. Un `PCA,…` dirigido a una PCA no presente cambia su `target`, pero `actualizarServos()` salta esa placa hasta que un `SCAN` la detecte.
+
+`CENTER` no interpola: escribe el centro de golpe en los 16 canales de cada PCA presente, incluidos los que no tienen servo. Al arrancar, la versión vigente lleva todos los servos al centro de su rango. Como abrir el puerto USB reinicia el Arduino, cada vez que robótica abre una conexión nueva el cuerpo salta al centro.
+
+`head/main.ino` usa 9600 baudios y un protocolo distinto; `-1\n` y `<id>\n` (ruta heredada de robótica) solo los entiende ese sketch. El menú impreso solo enumera hasta el 11; los ids 12 y 13 existen en la tabla pero no en el menú. Las secuencias de `pba-arduino-codes/sequences` no tienen `id`, categoría, descripción ni `blocks_neutro`: si se copiaran a la carpeta de robótica se listarían como legado y nunca entrarían al catálogo del turno. Algunas usan otro cableado (cara en la PCA 0, nombres de canal distintos).
+
+Pendiente de confirmar: el número de Arduinos en el cuerpo. Las 31 secuencias de robótica usan solo `arduino_id` 0, y el diseño admite varios. Pendiente de confirmar: si los SG90 de la cabeza tienen topes mecánicos más estrechos que 150–600 ticks; el firmware no limita por articulación.
 
 ## Parte IV. Despliegue y operación
 
