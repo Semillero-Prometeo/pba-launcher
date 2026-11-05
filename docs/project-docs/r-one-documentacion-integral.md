@@ -3030,20 +3030,543 @@ Queda, como resto visible, la ruta `/r-one`: un panel de rutinas predefinidas qu
 
 ### Anexo A. Glosario
 
-<!-- pendiente: tarea 14 -->
+Estos cinco anexos recogen lo que el cuerpo del documento no cabe repetir: el vocabulario, las variables, los sujetos NATS, las rutas HTTP y el índice de figuras. El glosario reescribe los veinticuatro términos del capítulo 2 de la memoria académica y añade los que el código de noviembre de 2026 usa de verdad. Cada entrada cabe en unas pocas frases; cuando el término tiene un capítulo propio, el enlace lleva allí.
+
+**Angular.** Marco de Google con el que está construida la mesa de control `pmas-web-main`. R-ONE usa Angular 21.2 con componentes independientes y señales, no módulos NgModule. La ficha está en [10](#10-pmas-web-main).
+
+**API (Application Programming Interface).** Conjunto de reglas con las que dos programas se hablan. En R-ONE la API que ve el navegador es HTTP y WebSocket en el gateway; detrás, cada servicio expone sujetos NATS. Las listas completas están en el [Anexo C](#anexo-c-patrones-nats) y el [Anexo D](#anexo-d-endpoints-http-del-gateway).
+
+**Base64.** Codificación que convierte bytes en texto ASCII y agranda el dato alrededor de un 33 %. El núcleo recorta a la persona en JPEG y la manda a BLIP en base64; las miniaturas de visión viajan igual dentro del snapshot. El recorte del turno está en [6.3](#63-chat-por-la-ruta-complejo-el-turno).
+
+**BLIP.** Modelo de descripción de imágenes de Salesforce. Recibe el recorte JPEG de la persona elegida y devuelve una frase en inglés que el modelo de acción usa como contexto, no como texto para la pantalla. Si falla, el turno sigue con el contexto vacío. La pieza vive en `pmai-model-context` y se cuenta en [4.5](#45-descripción-de-escena) y en [16](#16-pmai-model-context).
+
+**CMS (Content Management System).** Sistema para editar el contenido de un sitio sin tocar el código. La memoria lo listó porque la primera interfaz pensaba así las páginas del semillero. Hoy `info`, `team` y `projects` son componentes Angular estáticos; no hay CMS.
+
+**Componente.** Unidad de Angular que junta lógica, plantilla y estilos. En R-ONE cada página del cascarón autenticado (chat, visión, panel, secuencias, usuarios) es un componente independiente, cableado en `pmas-web-main/src/app/app.routes.ts`.
+
+**Compose.** Docker Compose es el orquestador del lanzador: un solo `docker-compose.yml` define los nueve servicios, los puertos y los montajes. No hay clave `version` en el archivo. El mapa está en [5.1](#51-servicios-y-puertos) y la ficha en [9](#9-pba-launcher).
+
+**Computed Signal.** Señal de Angular cuyo valor se calcula a partir de otras y se recalcula cuando cambian. La web las usa, por ejemplo, para derivar el estado visible del cascarón a partir de la sesión y del rol activo.
+
+**CRUD.** Crear, leer, actualizar y eliminar. En R-ONE aplica a usuarios, roles, personas, frases de «Decir oración» y secuencias; cada familia termina en un sujeto NATS distinto, no en un controlador único.
+
+**DOM (Document Object Model).** Árbol en memoria del HTML de la página. Angular lo actualiza cuando cambian las señales; el operador no lo toca.
+
+**Embedding.** Lista de números que representa el significado de un texto. R-ONE convierte cada pregunta en 384 números con `paraphrase-multilingual-MiniLM-L12-v2` y busca vecinos por distancia coseno en Milvus. La analogía del mapa de significados está en [4.6](#46-embeddings-y-búsqueda-vectorial).
+
+**Gateway.** Única puerta HTTP y WebSocket de la interfaz. Valida el JWT, la sesión y el rol, y traduce cada petición a un mensaje NATS. El proceso es `pba-ms-gateway`, puerto 3000. Ver [4.1](#41-microservicios-y-gateway) y [11](#11-pba-ms-gateway).
+
+**Gemma.** Modelo de lenguaje de Google que R-ONE corre en el miniPC, variante 4 E2B cuantizada a Q4_K_M. Es el respaldo cuando no hay clave OpenAI o la llamada a la nube falla; la pantalla entonces muestra `Gemma (local)`. El enrutador está en [4.8](#48-modelo-local-frente-a-modelo-en-la-nube) y en [17](#17-pmai-model-vision-language).
+
+**GGUF.** Formato de archivo para modelos de lenguaje cuantizados que corre `llama.cpp`. El de R-ONE es `pmai-model-vision-language/models/gguf/gemma-4-E2B-it-Q4_K_M.gguf`, unos 2,9 GB; si falta, se descarga de Hugging Face (`unsloth/gemma-4-E2B-it-GGUF`).
+
+**Guard.** Función que decide si se entra a una ruta. En Angular, `authGuard`, `guestGuard` y `roleGuard` cubren la navegación. En el gateway, `UserAccessGuard`, `JwtAuthGuard` y `RolesGuard` cubren el HTTP. El flujo de sesión está en [6.1](#61-inicio-de-sesión).
+
+**Interceptor.** Pieza que mira todas las peticiones o respuestas HTTP. La web adjunta `Authorization` y `X-Active-Role` en `pmas-web-main/src/app/core/interceptors/auth.interceptor.ts`. El gateway, por su lado, copia el `statusCode` de un microservicio al HTTP.
+
+**Jetson.** MiniPC NVIDIA Jetson Orin Nano Super, 8 GB, donde corre el stack en campo. Compose no pide `runtime: nvidia`: YOLO, BLIP y Gemma van por CPU. La ficha operativa está en [23](#23-la-jetson-orin-nano) y en `docs/project-docs/jetson-orin-nano-r-one.md`.
+
+**JWT (JSON Web Token).** Texto firmado que prueba la identidad. Auth lo emite con `{ user: { id, roles } }`; el gateway lo verifica con el mismo `SECRET`. Hay una sola sesión activa por cuenta. Ver [4.3](#43-sesión-y-jwt).
+
+**Label Studio.** Herramienta de etiquetado con la que el semillero dibujó recuadros sobre los fotogramas del detector. Cada clase es el nombre de un integrante, no «persona». El proceso está en [29.2](#292-etiquetado-en-label-studio).
+
+**llama.cpp.** Motor C++ (aquí, el enlace Python `llama-cpp-python`) que carga el GGUF de Gemma en CPU. Sustituye a Ollama, que la memoria daba por sentado y el código vigente ya no llama. Ver [4.8](#48-modelo-local-frente-a-modelo-en-la-nube) y [32](#32-la-primera-interfaz-y-las-decisiones-descartadas).
+
+**localStorage.** Almacén clave-valor del navegador que sobrevive al cierre de pestaña. La web guarda ahí el JWT (`prometeo_token`), el rol activo, los mensajes del chat y el registro del panel. El tope típico es de 5 a 10 MB por origen.
+
+**mAP (mean Average Precision).** Métrica del detector: el área bajo la curva precisión-recall. El entrenamiento `train5` reporta mAP50 y mAP50-95; las curvas están en [29.6](#296-resultados).
+
+**Microservicio.** Proceso independiente que hace una sola cosa y se habla con los demás por mensajes. R-ONE tiene cuatro de negocio detrás del gateway (auth, management, robótica, núcleo) más Postgres y NATS. Ver [4.1](#41-microservicios-y-gateway) y [5](#5-mapa-de-servicios).
+
+**Milvus.** Base de datos vectorial. R-ONE usa Milvus Lite, sin servidor aparte: el archivo real es `pmai-model-vision-language/utils/milvus/androide_milvus.db`. Compose pasa `MILVUS_DB_PATH` y nadie la lee. Colecciones y umbrales están en [7.2](#72-milvus-lite).
+
+**NATS.** Bus de mensajes de petición y respuesta. El servidor es el contenedor `nats-server`; el puerto 4222 no se publica al anfitrión. Los servicios Python imitan el sobre de NestJS. Ver [4.2](#42-nats-y-los-patrones-de-mensaje) y el [Anexo C](#anexo-c-patrones-nats).
+
+**NestJS.** Marco Node para el gateway, auth y management. Los dos últimos no sirven HTTP: solo atienden `@MessagePattern`. El gateway sí, sobre Fastify. Fichas [11](#11-pba-ms-gateway), [12](#12-pba-ms-auth) y [13](#13-pba-ms-management).
+
+**Neutro.** Pista de una secuencia (`blocks_neutro`) que devuelve cada servo a la postura de descanso. Robótica encola siempre normal, un segundo, neutro y otro segundo. Sin ese regreso, el gesto siguiente partiría de donde el anterior dejó el brazo. Ver [4.9](#49-secuencias-bloques-y-el-par-normal-y-neutro) y [6.5](#65-ciclo-de-un-gesto).
+
+**Observable (RxJS).** Flujo de valores en el tiempo. NestJS usa uno por cada petición NATS; robótica y el núcleo cierran ese flujo con `{ response, isDisposed: true }`. En la web, RxJS cubre el cliente HTTP.
+
+**PCA9685.** Circuito que, por I2C, mueve hasta dieciséis servos con dos pines. El firmware habla con hasta cuatro placas (`pca` 0–3). Robótica envía `PCA,<pca>,<servo>,<pos>,<vel>`. Ver [20](#20-pba-arduino-codes).
+
+**Piper.** Sintetizador de voz local. El modelo es `pba-ms-robotics/src/core/models/voice/es_ES-davefx-medium.onnx`. Si OpenAI TTS falla o no hay clave, robótica llama a `piper` y, si ese también falla, a eSpeak. Ver [14](#14-pba-ms-robotics).
+
+**Prisma.** Generador de cliente SQL. Auth define el esquema `auth` y las migraciones; el gateway copia el esquema y solo lee `session` en `/auth/me` y `/auth/verify`. Management trae un Prisma heredado sin modelos. Ver [7.1](#71-postgres-y-prisma).
+
+**PulseAudio.** Servidor de sonido del anfitrión. Compose monta el socket del UID 1000 y la cookie dentro de robótica para que `paplay` llegue al parlante Bluetooth. Sin cookie, Pulse responde `Access denied`. Ver [9.7](#97-configuración) y [22](#22-arranque-local-y-en-red-local).
+
+**PWM (Pulse Width Modulation).** Técnica que controla un servo variando el ancho del pulso. El PCA9685 genera esas señales; el firmware convierte la posición 0–1000 en el pulso que el motor entiende.
+
+**ReID (reidentificación).** Dar el mismo `id_global` a una persona que pasa de una cámara a otra, comparando huellas de aspecto (OSNet, 512 valores, umbral 0,6). No es el nombre de la clase YOLO: ese nombre es el integrante. Ver [4.4](#44-detección-seguimiento-y-reidentificación).
+
+**REST.** Estilo que usa los verbos HTTP sobre recursos. El gateway lo sigue en lo visible (`GET /users`, `POST /chat/question`); por detrás cada verbo es un sujeto NATS. El [Anexo D](#anexo-d-endpoints-http-del-gateway) lista las rutas.
+
+**RxJS.** Biblioteca de flujos asíncronos sobre la que se apoyan Angular y el cliente NATS de NestJS. En R-ONE no se programa a mano casi nada de RxJS fuera de `subscribe` a las respuestas del gateway.
+
+**Secuencia.** Partitura de movimiento: un JSON canónico con `id`, nombre, categoría, `blocks` y `blocks_neutro`. Solo el par completo con descripción de al menos diez caracteres entra al catálogo del turno. Viven en `pba-ms-robotics/data/sequences`. Ver [4.9](#49-secuencias-bloques-y-el-par-normal-y-neutro) y [7.3](#73-secuencias-en-json).
+
+**Signal (Angular).** Contenedor reactivo que avisa a quien lo lee cuando cambia. Es el estado local de la web: sesión, mensajes, runtime del hardware.
+
+**SPA (Single Page Application).** Aplicación que carga un HTML y cambia de vista sin recargar. `pmas-web-main` lo es: el cascarón autenticado y las páginas públicas conviven en el mismo bundle.
+
+**Turno.** Una pregunta a la vez, con visión, memoria y hasta tres gestos. Lo corre `interaction_turn.py` cuando los turnos están encendidos y el modelo es `complejo`. El recuento de pasos está en [6.3](#63-chat-por-la-ruta-complejo-el-turno).
+
+**TypeScript.** JavaScript con tipos. Lo usan la web, el gateway, auth y management. Se compila antes de ejecutarse; en Compose eso ocurre dentro de la imagen `node:22-slim`.
+
+**Vosk.** Reconocedor de voz embebido. El núcleo carga `pmai-mai-core/src/pmai_core/models/vosk-model-small-es-0.42` y transcribe en español tras la palabra de activación. La web no captura el audio del robot. Ver [6.4](#64-el-micrófono).
+
+**WebSocket.** Conexión persistente y bidireccional. El único de R-ONE es `ws://<host>:3000/vision/ws`: el gateway pide un snapshot NATS cada 500 ms y se lo empuja al navegador. Ver [6.6](#66-visión-en-tiempo-real).
+
+**XSS (Cross-Site Scripting).** Ataque que inyecta un script en una página. Angular escapa el texto interpolado por defecto; el chat pinta `reply` como texto, no como HTML.
+
+**YOLO.** Familia de detectores de objetos. El peso de R-ONE es YOLO11s entrenado sobre 25 rostros del semillero, copiado a `pmai-mai-core/src/pmai_core/models/my_model.pt`. No detecta «una persona»: detecta a un integrante. Ver [4.4](#44-detección-seguimiento-y-reidentificación) y [29](#29-el-detector-de-objetos).
 
 ### Anexo B. Variables de entorno
 
-<!-- pendiente: tarea 14 -->
+Este anexo lista las variables de `docker-compose.yml` y de `.env.template`, más las claves del TOML del núcleo y del `.env` del modelo de acción. La columna «Contenedor» es el nombre que ve el proceso; «Plantilla» es el valor de `.env.template` o el literal de Compose. Las claves van como `<secreto>` o `vacío`: no se copian valores reales. El catálogo por ficha está enlazado a la derecha; aquí no se repite el efecto largo de cada trampa.
+
+Cuatro hechos que conviene leer antes de la primera tabla. `NATS_SERVER` de la plantilla no se usa: Compose fija `nats://nats-server:4222` en cada servicio. `MILVUS_DB_PATH` se inyecta en `pmai-core` y ningún módulo la lee; la base real es `pmai-model-vision-language/utils/milvus/androide_milvus.db`. `PMAI_CORE_PORT` se publica y nada escucha. `OPENAI_SYSTEM_PROMPT` es obligatoria para Joi en management y el servicio importa una constante. `ACTION_DESCRIPTIONS_PATH` existe como defecto en robótica y nadie en `src` la usa: las frases de las secuencias las escribe el estudio al guardar.
+
+La plantilla no basta para arrancar gateway y auth: faltan `MS_GATEWAY_SECRET`, `MS_GATEWAY_RESTORE_PASSWORD_SECRET`, `MS_GATEWAY_PROJECT_ID` y `MS_AUTH_PROJECT_ID`. Esos nombres sí están en Compose. El comentario de robótica dice que la TTS reusa la clave de management si `MS_ROBOTICS_OPENAI_API_KEY` va vacía; Compose, en cambio, pasa esa variable tal cual, sin `:-`.
+
+#### Postgres (`db`)
+
+| Variable | Contenedor | Plantilla | Efecto | Ficha |
+|---|---|---|---|---|
+| `DB_USER` | `POSTGRES_USER` | vacío | Usuario de Postgres y de `pg_isready` | [9](#9-pba-launcher) |
+| `DB_PASSWORD` | `POSTGRES_PASSWORD` | vacío | Contraseña de Postgres | [9](#9-pba-launcher) |
+| `DB_NAME` | `POSTGRES_DB` | vacío | Base que se crea al arrancar | [9](#9-pba-launcher) |
+
+El puerto 5432 está fijo en Compose. `scripts/lan-up.sh` espera a `pg_isready` con `${DB_USER:-postgres}`; `scripts/seed-auth.sh` usa `-U postgres` fijo.
+
+#### NATS (`nats-server`)
+
+No recibe variables de la plantilla. Compose publica 8222, monta `nats.conf` y arranca `-c /etc/nats/nats.conf`. El puerto de clientes, 4222, solo existe dentro de la red de Docker. Ver [5.1](#51-servicios-y-puertos).
+
+#### pba-ms-gateway
+
+| Variable | Contenedor | Plantilla | Efecto | Ficha |
+|---|---|---|---|---|
+| `MS_GATEWAY_PORT` | `PORT` | `3000` | Puerto HTTP; `main.ts` cae a 3000 si faltara | [11](#11-pba-ms-gateway) |
+| `MS_GATEWAY_DATABASE_URL` | `DATABASE_URL` | vacío | Prisma; misma URL que auth con `?schema=auth` | [11](#11-pba-ms-gateway) |
+| `MS_GATEWAY_SECRET` | `SECRET` | no está en la plantilla | Verifica el JWT que firmó auth; tiene que coincidir con `MS_AUTH_SECRET` | [11](#11-pba-ms-gateway) |
+| `MS_GATEWAY_RESTORE_PASSWORD_SECRET` | `RESTORE_PASSWORD_SECRET` | no está en la plantilla | Verifica el token de restauración | [11](#11-pba-ms-gateway) |
+| `MS_GATEWAY_PROJECT_ID` | `PROJECT_ID` | no está en la plantilla | Joi la exige; ningún código del gateway la usa | [11](#11-pba-ms-gateway) |
+| (literal Compose) | `NATS_SERVER` | `nats://nats-server:4222` | Cliente NATS, espera 20 s | [11](#11-pba-ms-gateway) |
+| (literal Compose) | `NODE_ENV` | `development` | `configEnvs.environment` | [11](#11-pba-ms-gateway) |
+
+Compose publica además 9230 para el depurador Node. La web no lee `MS_GATEWAY_PORT`: arma `http://<hostname>:3000`.
+
+#### pba-ms-auth
+
+| Variable | Contenedor | Plantilla | Efecto | Ficha |
+|---|---|---|---|---|
+| `MS_AUTH_PORT` | `PORT` | `3001` | Joi la exige; no hay servidor HTTP | [12](#12-pba-ms-auth) |
+| `MS_AUTH_DATABASE_URL` | `DATABASE_URL` | vacío | Prisma del esquema `auth` | [12](#12-pba-ms-auth) |
+| `MS_AUTH_SECRET` | `SECRET` | vacío | Firma el JWT de acceso | [12](#12-pba-ms-auth) |
+| `MS_AUTH_RESTORE_PASSWORD_SECRET` | `RESTORE_PASSWORD_SECRET` | vacío | Firma el token de restauración | [12](#12-pba-ms-auth) |
+| `MS_AUTH_PROJECT_ID` | `PROJECT_ID` | no está en la plantilla | Audiencia de una estrategia Google que ningún controlador usa | [12](#12-pba-ms-auth) |
+| (literal Compose) | `NATS_SERVER` | `nats://nats-server:4222` | Servidor del microservicio | [12](#12-pba-ms-auth) |
+| (literal Compose) | `NODE_ENV` | `development` | Entorno Joi | [12](#12-pba-ms-auth) |
+
+El puerto 3001 se publica y nadie escucha. La vigencia del JWT la pone el ajuste `SESSION_EXPIRATION` de la base (8 h en la siembra), no esta tabla.
+
+#### pba-ms-management
+
+| Variable | Contenedor | Plantilla | Efecto | Ficha |
+|---|---|---|---|---|
+| `MS_MANAGEMENT_PORT` | `PORT` | `3002` | Joi la exige; no hay servidor HTTP | [13](#13-pba-ms-management) |
+| `MS_MANAGEMENT_DATABASE_URL` | `DATABASE_URL` | vacío | Prisma heredado, no montado | [13](#13-pba-ms-management) |
+| `MS_MANAGEMENT_OPENAI_API_KEY` | `OPENAI_API_KEY` | vacío | `chatStructured` de la ruta Básico; también respaldo de `pmai-core` | [13](#13-pba-ms-management) |
+| `MS_MANAGEMENT_OPENAI_SYSTEM_PROMPT` | `OPENAI_SYSTEM_PROMPT` | vacío | Joi la exige; el servicio no la lee | [13](#13-pba-ms-management) |
+| `MS_MANAGEMENT_OPENAI_MODEL` | `OPENAI_MODEL` | vacío | Modelo de `chatStructured`; Joi no admite vacío, así que la plantilla sola no arranca management | [13](#13-pba-ms-management) |
+| `MS_MANAGEMENT_CHAT_ROUTE_PATH` | (no se pasa) | vacío | Si viniera, sería el JSON de ruta; Compose no la inyecta y management cae a `pba-ms-management/data/chat-route.json` | [13](#13-pba-ms-management) |
+| (literal Compose) | `NATS_SERVER` | `nats://nats-server:4222` | Cliente NATS; `ask` espera 120 s | [13](#13-pba-ms-management) |
+| (literal Compose) | `NODE_ENV` | `development` | Entorno Joi | [13](#13-pba-ms-management) |
+
+El prompt que sí se envía es la constante de `pba-ms-management/src/openai-integration/constants/system-prompt.constant.ts`. El puerto 3002 se publica y nadie escucha.
+
+#### pba-ms-robotics
+
+| Variable | Contenedor | Plantilla | Efecto | Ficha |
+|---|---|---|---|---|
+| `MS_ROBOTICS_PORT` | `PORT` | `3003` | Uvicorn; no hay rutas de negocio | [14](#14-pba-ms-robotics) |
+| `MS_ROBOTICS_PIPER_MODEL_PATH` | `PIPER_MODEL_PATH` | `…/es_ES-davefx-medium.onnx` | Modelo Piper; Compose la deja vacía si la plantilla no llega (`:-`) | [14](#14-pba-ms-robotics) |
+| `MS_ROBOTICS_ESPEAK_VOICE` | `ESPEAK_VOICE` | `es` | Voz de eSpeak si Piper falla | [14](#14-pba-ms-robotics) |
+| `MS_ROBOTICS_VOICE_SKIP_PLAYBACK` | `VOICE_SKIP_PLAYBACK` | `0` | `1`/`true`/`yes` genera el WAV y no lo oye | [14](#14-pba-ms-robotics) |
+| `MS_ROBOTICS_PULSE_SERVER` | `PULSE_SERVER` | `unix:/run/user/1000/pulse/native` | Socket Pulse del UID 1000 | [14](#14-pba-ms-robotics) |
+| `MS_ROBOTICS_VOICE_TTS_MODE` | `VOICE_TTS_MODE` | no está en la plantilla | `local` nunca usa la nube; cualquier otro valor intenta OpenAI si hay clave (defecto de código `auto`) | [14](#14-pba-ms-robotics) |
+| `MS_ROBOTICS_OPENAI_API_KEY` | `OPENAI_API_KEY` | no está en la plantilla | TTS OpenAI; Compose no aplica el respaldo de management | [14](#14-pba-ms-robotics) |
+| `MS_ROBOTICS_OPENAI_TTS_MODEL` | `OPENAI_TTS_MODEL` | no está en la plantilla | Defecto de código `gpt-4o-mini-tts` | [14](#14-pba-ms-robotics) |
+| `MS_ROBOTICS_OPENAI_TTS_VOICE` | `OPENAI_TTS_VOICE` | no está en la plantilla | Defecto de código `ash` | [14](#14-pba-ms-robotics) |
+| `MS_ROBOTICS_OPENAI_TTS_SPEED` | `OPENAI_TTS_SPEED` | no está en la plantilla | Si falta, no se envía | [14](#14-pba-ms-robotics) |
+| `MS_ROBOTICS_OPENAI_TTS_TIMEOUT` | `OPENAI_TTS_TIMEOUT` | no está en la plantilla | Defecto de código 60 s | [14](#14-pba-ms-robotics) |
+| (literal Compose) | `NATS_SERVER` | `nats://nats-server:4222` | `env.py` la exige; el cliente igual conecta a `nats-server:4222` fijo | [14](#14-pba-ms-robotics) |
+| (literal Compose) | `ENV` | `development` | Nadie la lee | [14](#14-pba-ms-robotics) |
+| (literal Compose) | `PULSE_COOKIE` | `/root/.config/pulse/cookie` | Cookie montada desde el anfitrión | [14](#14-pba-ms-robotics) |
+| `GCLOUD_CONFIG_PATH` | (volumen) | `~/.config/gcloud` | Montaje; no es variable del proceso | [14](#14-pba-ms-robotics) |
+| `PULSE_COOKIE_PATH` | (volumen) | `${HOME}/.config/pulse/cookie` | Origen de la cookie | [14](#14-pba-ms-robotics) |
+
+No pasan a Compose y el código sí las entiende: `SEQUENCES_DATA_DIR` (defecto `/usr/src/app/data/sequences`), `PHRASES_PATH` (defecto `/usr/src/app/data/phrases.json`), `PULSE_SINK` y `VOICE_AUDIO_SINK`. `ACTION_DESCRIPTIONS_PATH` (defecto `/usr/src/app/data/action-descriptions.json`) no alimenta las descripciones del catálogo.
+
+#### pmas-web-main
+
+| Variable | Contenedor | Plantilla | Efecto | Ficha |
+|---|---|---|---|---|
+| `WEB_MAIN_PORT` | `WEB_MAIN_PORT` | `4200` | Puerto de `ng serve` | [10](#10-pmas-web-main) |
+| (literal Compose) | `NODE_OPTIONS` | `--max-old-space-size=4096` | Tope de memoria de Node | [10](#10-pmas-web-main) |
+
+La URL del gateway y la del estudio están fijas en código (3000 y 4210). `environment.compactMode` vale `true` y no sale de Compose.
+
+#### pmas-web-motion-studio
+
+| Variable | Contenedor | Plantilla | Efecto | Ficha |
+|---|---|---|---|---|
+| `MOTION_STUDIO_PORT` | `PORT` (y el de uvicorn) | `4210` | Uvicorn; Angular no lee este valor | [19](#19-pmas-web-motion-studio) |
+| `MOTION_STUDIO_DATA_DIR` | (no se pasa) | no está en la plantilla | Almacén local del estudio; defecto `pmas-web-motion-studio/data/sequences` | [19](#19-pmas-web-motion-studio) |
+
+#### pmai-core (Compose)
+
+| Variable | Contenedor | Plantilla | Efecto | Ficha |
+|---|---|---|---|---|
+| `PMAI_CORE_PORT` | (solo publicación) | `3004` | Se publica; no hay servidor HTTP | [15](#15-pmai-mai-core) |
+| `PMAI_CORE_SETTINGS` | `PMAI_SETTINGS` | `/app/settings.toml` | Nadie la lee; la ruta llega como argumento del comando | [15](#15-pmai-mai-core) |
+| `PMAI_CORE_PYTHONPATH` | `PYTHONPATH` | `/opt/model-context:/opt/action-model:/app/src` | Importa `model_context` y `utils`; no recortar | [15](#15-pmai-mai-core) |
+| `PMAI_OPENAI_API_KEY` | `OPENAI_API_KEY` | vacío; si falta, `MS_MANAGEMENT_OPENAI_API_KEY` | Clave de `responder()`; Compose siempre define la variable, aunque sea vacía | [15](#15-pmai-mai-core) |
+| `PMAI_CORE_OMP_NUM_THREADS` | `OMP_NUM_THREADS` | `1` | Hilos de PyTorch y BLAS | [15](#15-pmai-mai-core) |
+| `PMAI_CORE_MKL_NUM_THREADS` | `MKL_NUM_THREADS` | `1` | Igual | [15](#15-pmai-mai-core) |
+| `PMAI_CORE_OPENBLAS_NUM_THREADS` | `OPENBLAS_NUM_THREADS` | `1` | Igual; Gemma usa `n_threads=os.cpu_count()` igual | [15](#15-pmai-mai-core) |
+| (literal Compose) | `NATS_SERVER` | `nats://nats-server:4222` | Sustituye `nats.url` del TOML | [15](#15-pmai-mai-core) |
+| (literal Compose) | `MILVUS_DB_PATH` | `/data/milvus/androide_milvus.db` | Nadie la lee | [15](#15-pmai-mai-core) |
+
+#### pmai-mai-core (`settings.toml`)
+
+La configuración efectiva es el archivo montado en `/app/settings.toml`. Entre paréntesis, el defecto de `pmai-mai-core/src/pmai_core/settings.py` cuando difiere. El detalle de cada clave de audio está en [15.7](#157-configuración).
+
+| Clave | Contenedor | Valor | Efecto | Ficha |
+|---|---|---|---|---|
+| `app.name` | ninguna | `pmai-core` | Solo el log de arranque | [15](#15-pmai-mai-core) |
+| `app.log_level` | ninguna | `INFO` | Nadie la lee | [15](#15-pmai-mai-core) |
+| `camera.source_mode` | ninguna | `v4l2` | `v4l2` o `video_folder` | [15](#15-pmai-mai-core) |
+| `camera.auto_discover` | ninguna | `true` | Descubre USB en caliente | [15](#15-pmai-mai-core) |
+| `camera.video_folder_path` | ninguna | `/data` | Videos de prueba si el modo es carpeta | [15](#15-pmai-mai-core) |
+| `vision.model_path` | ninguna | `/app/src/pmai_core/models/my_model.pt` (defecto `models/yolo11n.onnx`) | Peso YOLO | [15](#15-pmai-mai-core) |
+| `vision.confidence_threshold` | ninguna | `0.5` | Descarta detecciones por debajo | [15](#15-pmai-mai-core) |
+| `vision.device` | ninguna | `cpu` | Dispositivo de inferencia | [15](#15-pmai-mai-core) |
+| `reid.model_path` | ninguna | `…/osnet_x0_25_msmt17.onnx` | Huella ReID | [15](#15-pmai-mai-core) |
+| `reid.similarity_threshold` | ninguna | `0.6` (defecto 0,7) | Similitud mínima para reusar `id_global` | [15](#15-pmai-mai-core) |
+| `reid.embedding_update_interval` | ninguna | `5` | ReID en el cuadro 1 y cada 5 | [15](#15-pmai-mai-core) |
+| `pipeline.result_interval_seconds` | ninguna | `0.75` (defecto 1,0) | Ritmo del motor y de los eventos | [15](#15-pmai-mai-core) |
+| `audio.enabled` | ninguna | `true` | Si es falso, no arranca el hilo | [15](#15-pmai-mai-core) |
+| `audio.min_useful_transcript_chars` | ninguna | `14` | Decide si se dice la frase de espera | [15](#15-pmai-mai-core) |
+| `audio.vosk_model_path` | ninguna | `…/vosk-model-small-es-0.42` | Modelo Vosk | [15](#15-pmai-mai-core) |
+| `audio.fallback_speak_message` | ninguna | frase de «no te escuché» | Nadie la lee; el turno tiene su constante | [15](#15-pmai-mai-core) |
+| `nats.url` | `NATS_SERVER` gana | `nats://localhost:4222` | RPC | [15](#15-pmai-mai-core) |
+| `nats.subject_prefix` | ninguna | `pmai` | Eventos `pmai.detection` y `pmai.reid` | [15](#15-pmai-mai-core) |
+| `nats.ms_name` | ninguna | `MAI_CORE_MS` | Prefijo de los sujetos RPC | [15](#15-pmai-mai-core) |
+
+#### pmai-model-vision-language
+
+En el contenedor este código se importa desde `/opt/action-model` porque va segundo en `PYTHONPATH`. `pmai-model-vision-language/utils/config.py` hace `load_dotenv(PROJECT_ROOT / ".env", override=False)`: solo rellena variables que aún no existen. Compose siempre define `OPENAI_API_KEY` (aunque sea vacía), de modo que el `.env` del repositorio no sirve de respaldo dentro del contenedor. Además, ese archivo no está en el árbol actual; solo existe `.env.example`.
+
+| Clave | Contenedor | Plantilla o constante | Efecto | Ficha |
+|---|---|---|---|---|
+| `OPENAI_API_KEY` | `OPENAI_API_KEY` | vacío (Compose); `.env.example` vacío | Única variable que lee `gptapi`; sin clave o si la llamada falla, Gemma | [17](#17-pmai-model-vision-language) |
+| `MILVUS_DB_PATH` (constante) | no es variable | `PROJECT_ROOT/utils/milvus/androide_milvus.db` | Ruta real de Milvus Lite; ignora la del mismo nombre en Compose | [17](#17-pmai-model-vision-language) |
+| `OPENAI_MODEL` (constante) | no es variable | `gpt-4o-mini` | Distinta de `OPENAI_MODEL` de management | [17](#17-pmai-model-vision-language) |
+
+El `.env.example` del repositorio lista otras dos claves de plantilla (Anthropic y Watson) que ningún módulo importa. Ollama, LangChain y las rutas de macOS del README de ese repo tampoco entran aquí.
+
+#### Scripts del anfitrión
+
+No entran al contenedor. `LAN_IFACE` fuerza la interfaz que anuncia `scripts/lan-up.sh`. `RONE_BT_DEVICE` (defecto `Thinkplus-K3-pro`) es el parlante que busca `scripts/bt-up.sh`. `WSL_DISTRO_NAME` y `XDG_CONFIG_HOME` las lee el mismo script de Bluetooth. En la Jetson, `DOCKER_INSECURE_NO_IPTABLES_RAW=1` evita el módulo de kernel que JetPack 6.2 no trae. Ver [9](#9-pba-launcher) y [23](#23-la-jetson-orin-nano).
 
 ### Anexo C. Patrones NATS
 
-<!-- pendiente: tarea 14 -->
+NATS no tiene colas con nombre de producto: cada sujeto es un string `SERVICIO.servicio.metodo`. NestJS lo registra con `@MessagePattern`; robótica y el núcleo, con `NatsSubscriber`. La petición lleva `{ id, pattern, data }` y la respuesta Python cierra el Observable de Nest con `{ response, isDisposed: true }`. Hay **37** patrones NestJS (31 de auth y 6 de management), igual al conteo de `@MessagePattern` en `pba-ms-*/src`. Hay **20** sujetos de robótica y **14** del núcleo, igual a los `NatsSubscriber` de las notas. A eso se suman dos eventos publicados sin respuesta. El gateway no atiende NATS: solo envía.
+
+Dos sujetos se piden y nadie los atiende. `DELETE /person/:id` manda `AUTH_MS.personService.remove`, y auth no tiene ese `@MessagePattern`: la petición espera hasta el tiempo límite. El cliente de auth de management llama a `AUTH_MS.countryService.findActive` y a `AUTH_MS.appSettingsService.findOne`, pero ese módulo no está importado en `AppModule`, así que en tiempo de ejecución no salen.
+
+#### AUTH_MS (31)
+
+Prefijo `AUTH_MS` en `pba-ms-auth/src/core/constants/ms-names.constant.ts`. Quien llama, salvo nota, es el gateway.
+
+| Patrón | Responde | Quién lo llama | Entrada | Salida | Archivo |
+|---|---|---|---|---|---|
+| `AUTH_MS.healthService.health` | auth | gateway `GET /auth-ms/health` | `{}` | `{ status, timestamp, msName }` | `pba-ms-auth/src/app.controller.ts` |
+| `AUTH_MS.authService.validateUser` | auth | `LocalAuthGuard` del login | `{ username, password }` | usuario con hash, o `null`; 401 si está de baja o bloqueado | `pba-ms-auth/src/auth/auth.controller.ts` |
+| `AUTH_MS.authService.login` | auth | `POST /auth/login` | `{ username }` (`push_token` se ignora) | `{ accessToken }` | `pba-ms-auth/src/auth/auth.controller.ts` |
+| `AUTH_MS.authService.requestNewPassword` | auth | `POST /auth/restore-password` | `{ email }` | mensaje; si el correo existe, también `resetToken` | `pba-ms-auth/src/auth/auth.controller.ts` |
+| `AUTH_MS.authService.getProfile` | auth | `GET /auth/me` y `GET /auth/verify` | `{ id }` | `UserResponse` sin contraseña | `pba-ms-auth/src/auth/auth.controller.ts` |
+| `AUTH_MS.authService.setNewPassword` | auth | `PUT /auth/set-password` | `{ newPassword, userId, token }` | `{ accessToken }` | `pba-ms-auth/src/auth/auth.controller.ts` |
+| `AUTH_MS.authService.findOneSession` | auth | `JwtAuthGuard` y el WebSocket de visión | `{ user_id }` | `session` activa o `null` | `pba-ms-auth/src/auth/auth.controller.ts` |
+| `AUTH_MS.authService.refreshToken` | auth | `POST /auth/refresh-token` | `{ userId }` | `{ accessToken }` nuevo; el login no emite refresh | `pba-ms-auth/src/auth/auth.controller.ts` |
+| `AUTH_MS.usersService.findAll` | auth | `GET /users` | paginación y `search` | `{ total, data }` | `pba-ms-auth/src/users/users.controller.ts` |
+| `AUTH_MS.usersService.findOne` | auth | `GET /users/:id`, guards e interceptor | `{ id }` UUID o username | `UserResponse` o `null` | `pba-ms-auth/src/users/users.controller.ts` |
+| `AUTH_MS.usersService.create` | auth | `POST /users` | `{ createUserDto }` | 201 con `{ id, username }` | `pba-ms-auth/src/users/users.controller.ts` |
+| `AUTH_MS.usersService.updateAuthUser` | auth | `PUT /users/:id` | `{ id, updateAuthUserDto, requestUser }` | usuario actualizado | `pba-ms-auth/src/users/users.controller.ts` |
+| `AUTH_MS.usersService.inactive` | auth | `PATCH /users/inactive` | `{ inactiveUserDto, requestUser }` | usuario con `deleted_at` | `pba-ms-auth/src/users/users.controller.ts` |
+| `AUTH_MS.usersService.active` | auth | `PATCH /users/active` | `{ user_id, reason? }` | usuario reactivado | `pba-ms-auth/src/users/users.controller.ts` |
+| `AUTH_MS.usersService.findByIdsOrRole` | auth | nadie en el lanzador | `{ ids?, roleName? }` | `UserResponse[]` | `pba-ms-auth/src/users/users.controller.ts` |
+| `AUTH_MS.personService.create` | auth | `POST /person` (público) | `CreatePersonDto` | `person` | `pba-ms-auth/src/person/person.controller.ts` |
+| `AUTH_MS.personService.findAll` | auth | `GET /person` | paginación | página de `person` | `pba-ms-auth/src/person/person.controller.ts` |
+| `AUTH_MS.personService.findOne` | auth | `GET /person/:id` | `{ id }` | `person` | `pba-ms-auth/src/person/person.controller.ts` |
+| `AUTH_MS.personService.update` | auth | `PUT /person/:id` | `{ id, updatePersonDto }` | `person` | `pba-ms-auth/src/person/person.controller.ts` |
+| `AUTH_MS.rolesService.findAll` | auth | `GET /roles` | paginación | `{ data, total }` | `pba-ms-auth/src/roles/roles.controller.ts` |
+| `AUTH_MS.rolesService.findOne` | auth | `GET /roles/:id` | `{ id }` UUID o nombre | `role` | `pba-ms-auth/src/roles/roles.controller.ts` |
+| `AUTH_MS.rolesService.setRoles` | auth | `POST /roles/set-roles` | `{ user_id, roles_id }` | transacción de roles | `pba-ms-auth/src/roles/roles.controller.ts` |
+| `AUTH_MS.rolesService.createRole` | auth | `POST /roles/create-role` | `{ name: ADMIN o USER }` | `role` | `pba-ms-auth/src/roles/roles.controller.ts` |
+| `AUTH_MS.rolesService.deleteRole` | auth | `DELETE /roles/delete-role/:id` | id como cadena | `role` con `deleted_at` | `pba-ms-auth/src/roles/roles.controller.ts` |
+| `AUTH_MS.documentTypesService.findAll` | auth | `GET /document-types` | `{}` | `document_type[]` | `pba-ms-auth/src/document-types/document-types.controller.ts` |
+| `AUTH_MS.documentTypesService.findOne` | auth | `GET /document-types/:id` | `{ id }` | tipo o `null` | `pba-ms-auth/src/document-types/document-types.controller.ts` |
+| `AUTH_MS.appSettingsService.findAll` | auth | `GET /app-settings` | `{}` | ajustes vigentes | `pba-ms-auth/src/app-settings/app-settings.controller.ts` |
+| `AUTH_MS.appSettingsService.findOne` | auth | nadie en tiempo de ejecución | `{ key }` | ajuste o `null` | `pba-ms-auth/src/app-settings/app-settings.controller.ts` |
+| `AUTH_MS.appSettingsService.getSetting` | auth | `GET /app-settings/:id` | `{ id, startAt? }` | ajuste vigente o `null` | `pba-ms-auth/src/app-settings/app-settings.controller.ts` |
+| `AUTH_MS.appSettingsService.update` | auth | `PATCH /app-settings/:id` | `{ id, appSettingsDto }` | `{ updatedSetting }` | `pba-ms-auth/src/app-settings/app-settings.controller.ts` |
+| `AUTH_MS.appSettingsService.updateMany` | auth | `PATCH /app-settings/many` | lista más categoría `AUTH` | ajustes nuevos | `pba-ms-auth/src/app-settings/app-settings.controller.ts` |
+
+#### MANAGEMENT_MS (6)
+
+Prefijo `MANAGEMENT_MS` en `pba-ms-management/src/core/constants/ms-names.constant.ts`.
+
+| Patrón | Responde | Quién lo llama | Entrada | Salida | Archivo |
+|---|---|---|---|---|---|
+| `MANAGEMENT_MS.healthService.health` | management | gateway `GET /management-ms/health` | `{}` | `{ status, timestamp, msName }` | `pba-ms-management/src/app.controller.ts` |
+| `MANAGEMENT_MS.chatService.chat` | management | `POST /chat/question`; el micrófono del núcleo (30 s) | `{ message }` | `{ reply, fuente?, movimientos? }` | `pba-ms-management/src/chat/chat.controller.ts` |
+| `MANAGEMENT_MS.chatService.declarePoema` | management | `POST /chat/poema` | ignorada | `{ reply }` | `pba-ms-management/src/chat/chat.controller.ts` |
+| `MANAGEMENT_MS.chatService.getRoute` | management | `GET /chat/route` | ignorada | `{ automationEnabled, selectedModel }` | `pba-ms-management/src/chat/chat.controller.ts` |
+| `MANAGEMENT_MS.chatService.setAutomation` | management | `PATCH /chat/route/automation` | `{ enabled }` | el estado de ruta | `pba-ms-management/src/chat/chat.controller.ts` |
+| `MANAGEMENT_MS.chatService.setModel` | management | `PATCH /chat/route/model` | `{ model }` | el estado, o 409 si se pide `complejo` con turnos apagados | `pba-ms-management/src/chat/chat.controller.ts` |
+
+`chat` reenvía a `MAI_CORE_MS.interactionService.ask` cuando `automationEnabled && selectedModel === 'complejo'`; si no, llama a OpenAI y a `ROBOTICS_MS.voiceService.speak`.
+
+#### ROBOTICS_MS (20)
+
+Constante `ROBOTICS_MS` en `pba-ms-robotics/src/core/settings/env.py`. Lista en `pba-ms-robotics/src/core/nats/nats_subscribers.py`.
+
+| Patrón | Responde | Quién lo llama | Entrada | Salida | Archivo |
+|---|---|---|---|---|---|
+| `ROBOTICS_MS.healthService.health` | robótica | gateway `GET /robotics-ms/health` | ignorada | `{ status, timestamp, msName }` | `pba-ms-robotics/src/app_controller.py` |
+| `ROBOTICS_MS.actionService.getActions` | robótica | gateway; el núcleo en cada turno (10 s) | ignorada | `{ total, data: [{ id, name, arduino_id, description }] }` | `pba-ms-robotics/src/action/action_controller.py` |
+| `ROBOTICS_MS.actionService.executeAction` | robótica | gateway; el núcleo por cada id válido (10 s) | `{ action_id, arduino_id }` | `{ status, response }` (`Encolado`, `omitido` o texto serie) | `pba-ms-robotics/src/action/action_controller.py` |
+| `ROBOTICS_MS.sequenceService.listArduinos` | robótica | panel, estudio, importación | ignorada | `[{ arduino_id, port, hardware_fingerprint }]` | `pba-ms-robotics/src/sequence/sequence_service.py` |
+| `ROBOTICS_MS.sequenceService.scanPcas` | robótica | `GET /sequence/pcas` | `{ arduino_id }` | `{ arduino_id, pcas }` | `pba-ms-robotics/src/sequence/sequence_service.py` |
+| `ROBOTICS_MS.sequenceService.listSequences` | robótica | panel y estudio | ignorada | `{ total, data }` | `pba-ms-robotics/src/sequence/sequence_service.py` |
+| `ROBOTICS_MS.sequenceService.getSequence` | robótica | panel (por archivo) y estudio | `{ name }` | JSON canónico | `pba-ms-robotics/src/sequence/sequence_service.py` |
+| `ROBOTICS_MS.sequenceService.saveSequence` | robótica | estudio e importación legado | `{ sequence, overwrite? }` | `{ status, message }` | `pba-ms-robotics/src/sequence/sequence_controller.py` |
+| `ROBOTICS_MS.sequenceService.deleteSequence` | robótica | `DELETE /sequence/file` | `{ name }` | `{ status, message }` | `pba-ms-robotics/src/sequence/sequence_service.py` |
+| `ROBOTICS_MS.sequenceService.startPlayback` | robótica | panel y estudio | `{ mode, source, name?, blocks? }` | `{ status, message }` | `pba-ms-robotics/src/sequence/sequence_service.py` |
+| `ROBOTICS_MS.sequenceService.stopPlayback` | robótica | cajón Detener y estudio | `{}` | `{ status, message }` | `pba-ms-robotics/src/sequence/sequence_controller.py` |
+| `ROBOTICS_MS.sequenceService.startChain` | robótica | `POST /sequence/chain/start` | `{ items: [{ name, repeat, delay_ms }] }` | `{ status, message }` | `pba-ms-robotics/src/sequence/sequence_controller.py` |
+| `ROBOTICS_MS.sequenceService.stopChain` | robótica | `POST /sequence/chain/stop` | `{}` | `{ status, message }` | `pba-ms-robotics/src/sequence/sequence_service.py` |
+| `ROBOTICS_MS.sequenceService.chainStatus` | robótica | `GET /sequence/chain/status` | ignorada | `{ status, running, current_sequence, … }` | `pba-ms-robotics/src/sequence/sequence_service.py` |
+| `ROBOTICS_MS.sequenceService.getRuntime` | robótica | cajón de hardware cada 0,5–3 s | ignorada | `RuntimeSnapshot` | `pba-ms-robotics/src/sequence/sequence_service.py` |
+| `ROBOTICS_MS.voiceService.speak` | robótica | núcleo (30 s), management (20 s), `POST /voice/speak` | `{ message }` | `{ message, spoken, sink }` cuando terminó de sonar | `pba-ms-robotics/src/voice/voice_service.py` |
+| `ROBOTICS_MS.phraseService.list` | robótica | pestaña Decir oración | ignorada | `{ items }` | `pba-ms-robotics/src/voice/phrases/phrase_controller.py` |
+| `ROBOTICS_MS.phraseService.create` | robótica | alta de frase | `{ title, text, icon? }` | frase creada | `pba-ms-robotics/src/voice/phrases/phrase_controller.py` |
+| `ROBOTICS_MS.phraseService.update` | robótica | edición de frase | `{ id, title?, text?, icon? }` | frase | `pba-ms-robotics/src/voice/phrases/phrase_controller.py` |
+| `ROBOTICS_MS.phraseService.setActive` | robótica | activar o ocultar frase | `{ id, active }` | frase | `pba-ms-robotics/src/voice/phrases/phrase_controller.py` |
+
+#### MAI_CORE_MS (14)
+
+`ms_name = "MAI_CORE_MS"` en `pmai-mai-core/settings.toml`. Lista en `pmai-mai-core/src/pmai_core/core/nats/nats_subscribers.py`.
+
+| Patrón | Responde | Quién lo llama | Entrada | Salida | Archivo |
+|---|---|---|---|---|---|
+| `MAI_CORE_MS.healthService.health` | núcleo | gateway `GET /mai-core-ms/health` | ignorada | `{ status, timestamp, msName }` | `pmai-mai-core/src/pmai_core/api/health/health_controller.py` |
+| `MAI_CORE_MS.cameraService.getCameras` | núcleo | `GET /camera` | ignorada | `{ version, count, cameras }` | `pmai-mai-core/src/pmai_core/api/camera/camera_controller.py` |
+| `MAI_CORE_MS.cameraService.getCameraView` | núcleo | `GET /camera/:camera_id` | `{ camera_id }` | JPEG anotado en base64; 404 si no hay cuadro | `pmai-mai-core/src/pmai_core/api/camera/camera_controller.py` |
+| `MAI_CORE_MS.monitoringService.getObjects` | núcleo | `GET /monitoring/objects` | ignorada | `{ identities, ids }` | `pmai-mai-core/src/pmai_core/api/monitoring/monitoring_controller.py` |
+| `MAI_CORE_MS.monitoringService.getTrackers` | núcleo | `GET /monitoring/trackers` | ignorada | `{ active_cameras }` | `pmai-mai-core/src/pmai_core/api/monitoring/monitoring_controller.py` |
+| `MAI_CORE_MS.monitoringService.getTrackedObjects` | núcleo | `GET /monitoring/tracked-objects` | ignorada | `{ count, objects }` | `pmai-mai-core/src/pmai_core/api/monitoring/monitoring_controller.py` |
+| `MAI_CORE_MS.monitoringService.getReidStatus` | núcleo | `GET /monitoring/reid-status` | ignorada | `{ total_identities, identities }` | `pmai-mai-core/src/pmai_core/api/monitoring/monitoring_controller.py` |
+| `MAI_CORE_MS.visionService.getSnapshot` | núcleo | `GET /vision/snapshot` y el WebSocket cada 500 ms | `{ selectedCameraId, thumbMaxWidth, previewMaxWidth }` | snapshot camelCase; `previewJpegBase64` siempre `null` | `pmai-mai-core/src/pmai_core/api/vision/vision_controller.py` |
+| `MAI_CORE_MS.microphoneService.listMicrophones` | núcleo | `GET /audio/microphones` | ignorada | lista con el seleccionado | `pmai-mai-core/src/pmai_core/api/audio/audio_controller.py` |
+| `MAI_CORE_MS.microphoneService.selectMicrophone` | núcleo | `POST /audio/select-microphone` | `{ microphone_id }` | `{ status, selected_microphone_id }` | `pmai-mai-core/src/pmai_core/api/audio/audio_controller.py` |
+| `MAI_CORE_MS.microphoneService.startListening` | núcleo | `POST /audio/start-listening` | `{}` | `{ status, message }` | `pmai-mai-core/src/pmai_core/api/audio/audio_controller.py` |
+| `MAI_CORE_MS.microphoneService.stopListening` | núcleo | `POST /audio/stop-listening` | `{}` | `{ status, message }` | `pmai-mai-core/src/pmai_core/api/audio/audio_controller.py` |
+| `MAI_CORE_MS.microphoneService.getListeningStatus` | núcleo | chat cada 500 ms | `{}` | fase, nivel 0–100, última transcripción | `pmai-mai-core/src/pmai_core/api/audio/audio_controller.py` |
+| `MAI_CORE_MS.interactionService.ask` | núcleo | management en la ruta Complejo (120 s) | `{ message }` | `{ reply, fuente, movimientos }` con fuente fijada a `chat` | `pmai-mai-core/src/pmai_core/api/interaction/interaction_controller.py` |
+
+#### Eventos publicados (2)
+
+El segundo cliente NATS del núcleo publica sin esperar respuesta, con prefijo `pmai` (`pmai-mai-core/src/pmai_core/messaging/client.py`). Ningún otro repositorio se suscribe.
+
+| Patrón | Publica | Quién lo llama | Entrada | Salida | Archivo |
+|---|---|---|---|---|---|
+| `pmai.detection` | núcleo | pipeline de identificación, por objeto seguido | `ObjectDetectedEvent` | ninguna | `pmai-mai-core/src/pmai_core/resources/identification/service.py` |
+| `pmai.reid` | núcleo | el mismo pipeline, si hay `id_global` | `ObjectReIdentifiedEvent` | ninguna | `pmai-mai-core/src/pmai_core/resources/identification/service.py` |
 
 ### Anexo D. Endpoints HTTP del gateway
 
-<!-- pendiente: tarea 14 -->
+El gateway no pone prefijo global: la URL es `http://<host>:3000/<controlador>/<ruta>`. Todas las rutas pasan primero por `UserAccessGuard`, salvo las marcadas `@Public()`. En la columna Guard, «Pública» es `@Public()`; «JWT+sesión+rol» es `JwtAuthGuard`; «ADMIN» añade `RolesGuard` con rol `ADMIN`; «Acceso» es solo el guard global (JWT válido, sin exigir sesión activa ni rol); «Perfil» es `JwtMeAuthGuard` (sesión sí, rol no). El detalle de filtros, CORS y el tiempo límite NATS de 20 s está en [11](#11-pba-ms-gateway).
+
+Hay **69** rutas HTTP y **1** WebSocket, las mismas que registran los controladores de `pba-ms-gateway/src`. La página heredada `/r-one` llama a `/robotics/execute` y `/robotics/health`, que no existen aquí.
+
+#### Salud
+
+| Método | Ruta | Guard | Patrón NATS | Uso en la interfaz |
+|---|---|---|---|---|
+| GET | `/health` | Pública | ninguno; responde el propio gateway | menú de salud |
+| GET | `/auth-ms/health` | Pública | `AUTH_MS.healthService.health` | menú de salud |
+| GET | `/management-ms/health` | Pública | `MANAGEMENT_MS.healthService.health` | menú de salud |
+| GET | `/robotics-ms/health` | Pública | `ROBOTICS_MS.healthService.health` | menú de salud |
+| GET | `/mai-core-ms/health` | Pública | `MAI_CORE_MS.healthService.health` | menú de salud |
+
+#### Autenticación
+
+| Método | Ruta | Guard | Patrón NATS | Uso en la interfaz |
+|---|---|---|---|---|
+| POST | `/auth/login` | Pública + `LocalAuthGuard` | `AUTH_MS.authService.login` (antes, `validateUser`) | pantalla de login |
+| POST | `/auth/restore-password` | Pública | `AUTH_MS.authService.requestNewPassword` | la web no lo llama |
+| GET | `/auth/me` | Perfil | `AUTH_MS.authService.getProfile` | sesión, perfil, selector de rol |
+| GET | `/auth/verify` | Perfil | `AUTH_MS.authService.getProfile` | la web no lo llama |
+| PUT | `/auth/set-password` | Pública + `password-reset` | `AUTH_MS.authService.setNewPassword` | la web no lo llama |
+| POST | `/auth/refresh-token` | Pública + `RefreshTokenGuard` | `AUTH_MS.authService.refreshToken` | la web no lo llama; auth no emite refresh en el login |
+
+#### Usuarios, personas, roles y ajustes
+
+| Método | Ruta | Guard | Patrón NATS | Uso en la interfaz |
+|---|---|---|---|---|
+| GET | `/users` | ADMIN | `AUTH_MS.usersService.findAll` | página Usuarios |
+| GET | `/users/:id` | ADMIN | `AUTH_MS.usersService.findOne` | la web no lo llama (el listado basta) |
+| POST | `/users` | ADMIN | `AUTH_MS.usersService.create` | alta de usuario |
+| PUT | `/users/:id` | ADMIN | `AUTH_MS.usersService.updateAuthUser` | edición de usuario |
+| PATCH | `/users/inactive` | ADMIN | `AUTH_MS.usersService.inactive` | baja desde Usuarios |
+| PATCH | `/users/active` | ADMIN | `AUTH_MS.usersService.active` | la web no lo llama |
+| POST | `/person` | Pública | `AUTH_MS.personService.create` | la web no lo llama |
+| GET | `/person` | JWT+sesión+rol | `AUTH_MS.personService.findAll` | la web no lo llama |
+| GET | `/person/:id` | JWT+sesión+rol | `AUTH_MS.personService.findOne` | la web no lo llama |
+| PUT | `/person/:id` | JWT+sesión+rol | `AUTH_MS.personService.update` | la web no lo llama |
+| DELETE | `/person/:id` | JWT+sesión+rol | `AUTH_MS.personService.remove` (auth no responde) | la web no lo llama |
+| GET | `/roles` | ADMIN | `AUTH_MS.rolesService.findAll` | selector de roles en Usuarios |
+| GET | `/roles/:id` | ADMIN | `AUTH_MS.rolesService.findOne` | la web no lo llama |
+| POST | `/roles/set-roles` | ADMIN | `AUTH_MS.rolesService.setRoles` | la web no lo llama |
+| POST | `/roles/create-role` | ADMIN | `AUTH_MS.rolesService.createRole` | la web no lo llama |
+| DELETE | `/roles/delete-role/:id` | ADMIN | `AUTH_MS.rolesService.deleteRole` | la web no lo llama |
+| GET | `/document-types` | Acceso | `AUTH_MS.documentTypesService.findAll` | tipos de documento en el alta |
+| GET | `/document-types/:id` | Acceso | `AUTH_MS.documentTypesService.findOne` | la web no lo llama |
+| GET | `/app-settings` | JWT+sesión+rol | `AUTH_MS.appSettingsService.findAll` | la web no lo llama |
+| GET | `/app-settings/:id` | JWT+sesión+rol | `AUTH_MS.appSettingsService.getSetting` | la web no lo llama |
+| PATCH | `/app-settings/many` | JWT+sesión+rol | `AUTH_MS.appSettingsService.updateMany` | la web no lo llama |
+| PATCH | `/app-settings/:id` | JWT+sesión+rol | `AUTH_MS.appSettingsService.update` | la web no lo llama |
+
+`PATCH /app-settings/:id` y `PATCH /app-settings/many` no piden ADMIN: cualquier sesión puede cambiar `SESSION_EXPIRATION` o el bloqueo de login.
+
+#### Chat
+
+| Método | Ruta | Guard | Patrón NATS | Uso en la interfaz |
+|---|---|---|---|---|
+| POST | `/chat/question` | JWT+sesión+rol | `MANAGEMENT_MS.chatService.chat` | caja del chat |
+| POST | `/chat/poema` | JWT+sesión+rol | `MANAGEMENT_MS.chatService.declarePoema` | ningún botón lo llama |
+| GET | `/chat/route` | JWT+sesión+rol | `MANAGEMENT_MS.chatService.getRoute` | selector Básico o Complejo |
+| PATCH | `/chat/route/automation` | ADMIN | `MANAGEMENT_MS.chatService.setAutomation` | interruptor de turnos |
+| PATCH | `/chat/route/model` | JWT+sesión+rol | `MANAGEMENT_MS.chatService.setModel` | selector de modelo (cualquier usuario cambia el global) |
+
+#### Acciones, voz y secuencias
+
+| Método | Ruta | Guard | Patrón NATS | Uso en la interfaz |
+|---|---|---|---|---|
+| GET | `/action/actions` | JWT+sesión+rol | `ROBOTICS_MS.actionService.getActions` | la web no lo llama |
+| GET | `/action/execute` | JWT+sesión+rol | `ROBOTICS_MS.actionService.executeAction` | la web no lo llama |
+| POST | `/voice/speak` | JWT+sesión+rol | `ROBOTICS_MS.voiceService.speak` | Decir oración |
+| GET | `/voice/phrases` | JWT+sesión+rol | `ROBOTICS_MS.phraseService.list` | lista de frases |
+| POST | `/voice/phrases` | JWT+sesión+rol | `ROBOTICS_MS.phraseService.create` | alta de frase |
+| PATCH | `/voice/phrases/:id/active` | JWT+sesión+rol | `ROBOTICS_MS.phraseService.setActive` | mostrar u ocultar |
+| PATCH | `/voice/phrases/:id` | JWT+sesión+rol | `ROBOTICS_MS.phraseService.update` | edición de frase |
+| GET | `/sequence/arduinos` | JWT+sesión+rol | `ROBOTICS_MS.sequenceService.listArduinos` | panel, estudio e importación |
+| GET | `/sequence/pcas` | JWT+sesión+rol | `ROBOTICS_MS.sequenceService.scanPcas` | la web no lo llama |
+| GET | `/sequence/files` | JWT+sesión+rol | `ROBOTICS_MS.sequenceService.listSequences` | panel y biblioteca del estudio |
+| GET | `/sequence/file` | JWT+sesión+rol | `ROBOTICS_MS.sequenceService.getSequence` | panel (bloques) y estudio |
+| POST | `/sequence/file` | JWT+sesión+rol | `ROBOTICS_MS.sequenceService.saveSequence` | estudio e importación legado |
+| DELETE | `/sequence/file` | JWT+sesión+rol | `ROBOTICS_MS.sequenceService.deleteSequence` | la web no lo llama |
+| POST | `/sequence/play` | JWT+sesión+rol | `ROBOTICS_MS.sequenceService.startPlayback` | Gesto o Neutro del panel; Play del estudio |
+| POST | `/sequence/stop` | JWT+sesión+rol | `ROBOTICS_MS.sequenceService.stopPlayback` | Detener del cajón y del estudio |
+| POST | `/sequence/chain/start` | JWT+sesión+rol | `ROBOTICS_MS.sequenceService.startChain` | la web no lo llama |
+| POST | `/sequence/chain/stop` | JWT+sesión+rol | `ROBOTICS_MS.sequenceService.stopChain` | la web no lo llama |
+| GET | `/sequence/chain/status` | JWT+sesión+rol | `ROBOTICS_MS.sequenceService.chainStatus` | la web no lo llama |
+| GET | `/sequence/runtime` | JWT+sesión+rol | `ROBOTICS_MS.sequenceService.getRuntime` | cajón de hardware |
+
+#### Audio, cámaras, monitoreo y visión
+
+| Método | Ruta | Guard | Patrón NATS | Uso en la interfaz |
+|---|---|---|---|---|
+| GET | `/audio/microphones` | JWT+sesión+rol | `MAI_CORE_MS.microphoneService.listMicrophones` | la web no lo llama |
+| POST | `/audio/select-microphone` | JWT+sesión+rol | `MAI_CORE_MS.microphoneService.selectMicrophone` | la web no lo llama |
+| POST | `/audio/start-listening` | JWT+sesión+rol | `MAI_CORE_MS.microphoneService.startListening` | la web no lo llama |
+| POST | `/audio/stop-listening` | JWT+sesión+rol | `MAI_CORE_MS.microphoneService.stopListening` | la web no lo llama |
+| GET | `/audio/listening-status` | JWT+sesión+rol | `MAI_CORE_MS.microphoneService.getListeningStatus` | indicador del micrófono, cada 500 ms |
+| GET | `/camera` | JWT+sesión+rol | `MAI_CORE_MS.cameraService.getCameras` | la web no lo llama |
+| GET | `/camera/:camera_id` | JWT+sesión+rol | `MAI_CORE_MS.cameraService.getCameraView` | la web no lo llama |
+| GET | `/monitoring/objects` | JWT+sesión+rol | `MAI_CORE_MS.monitoringService.getObjects` | la web no lo llama |
+| GET | `/monitoring/trackers` | JWT+sesión+rol | `MAI_CORE_MS.monitoringService.getTrackers` | la web no lo llama |
+| GET | `/monitoring/tracked-objects` | JWT+sesión+rol | `MAI_CORE_MS.monitoringService.getTrackedObjects` | la web no lo llama |
+| GET | `/monitoring/reid-status` | JWT+sesión+rol | `MAI_CORE_MS.monitoringService.getReidStatus` | la web no lo llama |
+| GET | `/vision/snapshot` | JWT+sesión+rol | `MAI_CORE_MS.visionService.getSnapshot` | la web no lo llama; el WS usa el mismo sujeto |
+| WS | `/vision/ws` | JWT en la consulta, sesión y rol | `MAI_CORE_MS.visionService.getSnapshot` cada 500 ms; `findOneSession` y `usersService.findOne` al conectar | página Visión |
+
+El WebSocket acepta `setSelection` y `setQuality`. Si el token no vale, cierra con código 4001 y la web vuelve al login. El JWT viaja en la URL.
 
 ### Anexo E. Índice de figuras y diagramas
 
-<!-- pendiente: tarea 14 -->
+Los números se dejan tal cual aparecen en el documento; la Task 15 los renumerará. Hay **30** figuras (pies `*Figura …*`) y **19** bloques Mermaid, los mismos que produce `rg` sobre `docs/project-docs/r-one-documentacion-integral.md`.
+
+#### Figuras
+
+| Número | Pie | Sección |
+|---|---|---|
+| 1 | Arquitectura de alto nivel: la web habla con el gateway y este con cuatro microservicios por NATS | [2](#2-el-sistema-en-una-página) |
+| VI-0 | Plan de arranque: ocho hitos, no nueve; el recuadro «Flujo real» desglosa el hito 3 | [28](#28-stakeholders-e-hitos) |
+| VI-1 | Fotogramas extraídos a un cuadro por segundo | [29.1](#291-captura-y-extracción-de-imágenes) |
+| VI-2 | Etiquetado en Label Studio: el recuadro se dibuja a mano y la clase es un nombre del semillero | [29.2](#292-etiquetado-en-label-studio) |
+| VI-3 | Ejemplo de etiquetado sobre una escena con más de una persona | [29.2](#292-etiquetado-en-label-studio) |
+| VI-4 | Segundo ejemplo; el recuadro cubre la cara, no el cuerpo entero | [29.2](#292-etiquetado-en-label-studio) |
+| VI-5 | Distribución de instancias por clase y geometría de los recuadros | [29.3](#293-análisis-del-dataset) |
+| VI-6 | Pérdidas, precisión, recall, mAP50 y mAP50-95 de la corrida train5 | [29.6](#296-resultados) |
+| VI-7 | Precisión por umbral de confianza | [29.6](#296-resultados) |
+| VI-8 | Recall por umbral de confianza | [29.6](#296-resultados) |
+| VI-9 | Curva precisión-recall; el área es el mAP50 | [29.6](#296-resultados) |
+| VI-10 | F1 por umbral | [29.6](#296-resultados) |
+| VI-11 | Matriz de confusión normalizada | [29.6](#296-resultados) |
+| VI-12 | Predicciones de validación: el recuadro es la cara y la etiqueta es el nombre | [29.6](#296-resultados) |
+| VI-13 | Detección en una foto de grupo | [29.6](#296-resultados) |
+| VI-14 | Detección junto al robot: la clase es el integrante, no el androide | [29.6](#296-resultados) |
+| VI-15 | El detector en el pipeline de mai-core | [29.7](#297-despliegue-en-mai-core) |
+| VI-16 | Métricas de las pruebas de captioning | [30.2](#302-pruebas-de-blip-base-y-geospace) |
+| VI-17 | Resumen del caso de prueba 1 sobre BLIP-base | [30.2](#302-pruebas-de-blip-base-y-geospace) |
+| VI-18 | Imagen de prueba para el caption: un gato | [30.3](#303-optimización-e-inferencia) |
+| VI-19 | Descripción generada a partir de la figura anterior | [30.3](#303-optimización-e-inferencia) |
+| VI-20 | Resultados descriptivos impresos por frame | [30.3](#303-optimización-e-inferencia) |
+| VI-21 | Palabras omitidas en la inferencia | [30.4](#304-alucinaciones-y-palabras-protegidas) |
+| VI-22 | Patrones de alucinación aplicados después del filtro | [30.4](#304-alucinaciones-y-palabras-protegidas) |
+| VI-23 | Palabras protegidas del modelo contextual | [30.4](#304-alucinaciones-y-palabras-protegidas) |
+| VI-24 | Inferencia con una imagen real del stand | [30.4](#304-alucinaciones-y-palabras-protegidas) |
+| VI-24b | Arquitectura del modelo de acción: pregunta, caché y gestos | [31.1](#311-fase-de-análisis) |
+| VI-25 | Postprocesamiento según la memoria; el filtro vive hoy en el modelo contextual | [31.1](#311-fase-de-análisis) |
+| VI-26 | Ingesta según la memoria; el código vigente siembra pares curados | [31.2](#312-ingesta-por-web-scraping) |
+| VI-27 | Gestión de solicitudes a la base vectorial; el LLM del recuadro es Ollama, ya descartado | [31.3](#313-búsqueda-semántica-y-caché) |
+
+#### Diagramas Mermaid
+
+| Tipo | Tema | Sección |
+|---|---|---|
+| flowchart | R-ONE en cuatro bloques: percepción, núcleo, servicios, cuerpo e interfaz | [2](#2-el-sistema-en-una-página) |
+| flowchart | Recorrido de una pregunta desde el micrófono hasta la voz y el gesto | [3](#3-recorrido-de-una-pregunta) |
+| flowchart | Canales reales entre servicios (HTTP, NATS, serie, Pulse) | [5.2](#52-canales-de-comunicación) |
+| sequenceDiagram | Login: web, gateway, auth y Postgres | [6.1](#61-inicio-de-sesión) |
+| sequenceDiagram | Chat por la ruta Básico: OpenAI y `speak`, sin visión ni gestos | [6.2](#62-chat-por-la-ruta-básico) |
+| sequenceDiagram | Chat por la ruta Complejo: los seis pasos del turno | [6.3](#63-chat-por-la-ruta-complejo-el-turno) |
+| stateDiagram-v2 | Estados del turno: voz corta, ocupado, caché, OpenAI, Gemma o disculpa | [6.3](#63-chat-por-la-ruta-complejo-el-turno) |
+| sequenceDiagram | El micrófono transcribe y entra por `chatService.chat` | [6.4](#64-el-micrófono) |
+| stateDiagram-v2 | Cola de un gesto: libre, normal, espera, neutro, Detener | [6.5](#65-ciclo-de-un-gesto) |
+| sequenceDiagram | Un gesto desde el panel o el estudio hasta el Arduino | [6.5](#65-ciclo-de-un-gesto) |
+| sequenceDiagram | Visión: WebSocket del gateway pidiendo snapshots NATS | [6.6](#66-visión-en-tiempo-real) |
+| sequenceDiagram | Creación e ingesta de una secuencia desde el estudio | [6.7](#67-creación-e-ingesta-de-una-secuencia) |
+| sequenceDiagram | Declarar un poema: OpenAI y `speak`, fuera del turno | [6.8](#68-declarar-un-poema) |
+| erDiagram | Tablas Prisma del esquema `auth` | [7.1](#71-postgres-y-prisma) |
+| flowchart | Búsqueda en Milvus: `conocimiento` y después `interacciones` | [7.2](#72-milvus-lite) |
+| flowchart | `executeAction` encola normal, espera, neutro y espera | [14.6](#146-contratos) |
+| flowchart | Pipeline interno de visión: YOLO, seguimiento, ReID y snapshot | [15.6](#156-contratos) |
+| flowchart | Turno por módulos: candado, BLIP, catálogo y `responder` | [15.6](#156-contratos) |
+| flowchart | Del video al peso YOLO: FFmpeg, Label Studio y train5 | [29.1](#291-captura-y-extracción-de-imágenes) |
