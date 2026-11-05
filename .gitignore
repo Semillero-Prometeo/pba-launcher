@@ -70,3 +70,6 @@ data/
 
 *.hnsw.idx
 *.arrow
+# documentación integral: área de trabajo y Word archivado
+docs/project-docs/.work/
+docs/project-docs/archivo/*.docx
