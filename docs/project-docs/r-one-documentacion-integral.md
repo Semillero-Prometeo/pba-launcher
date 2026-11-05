@@ -854,35 +854,762 @@ El núcleo precarga Milvus, BLIP, el modelo de embeddings y Gemma al arrancar, e
 
 ## Parte III. Repositorios
 
-<!-- pendiente: tarea 10 -->
+> Esta parte es para quien vaya a tocar el código. Cada ficha describe un repositorio: para qué existe, con qué se construye, cómo está organizado, qué contratos expone y consume, cómo se configura, cómo se prueba y dónde suele tropezar quien llega. Los flujos (login, chat, micrófono, gesto, visión, estudio, poema) ya están en la [Parte II](#parte-ii-arquitectura-y-flujos); aquí no se vuelven a contar, se enlazan. Quien trabaje en una sola pieza puede saltar a su ficha: [9](#9-pba-launcher), [10](#10-pmas-web-main), [11](#11-pba-ms-gateway), [12](#12-pba-ms-auth), [13](#13-pba-ms-management), [14](#14-pba-ms-robotics), [15](#15-pmai-mai-core), [16](#16-pmai-model-context), [17](#17-pmai-model-vision-language), [18](#18-pmai-model-vision), [19](#19-pmas-web-motion-studio) o [20](#20-pba-arduino-codes).
 
 ### 8. Cómo leer una ficha
 
-<!-- pendiente: tarea 10 -->
+Todas las fichas de esta parte siguen la misma plantilla de nueve apartados, numerados con el número de la ficha. Así, en robótica el propósito es `14.1` y las trampas son `14.9`; en el lanzador, `9.1` y `9.9`. El orden no cambia:
+
+1. **Propósito.** Qué hace el repositorio en R-ONE y, igual de importante, qué no hace. Una o dos analogías del propio sistema, no un resumen de marketing.
+2. **Versión.** Rama, commit corto y fecha, tomados de la tabla [Versión documentada](#versión-documentada). Si el puntero del submódulo no coincidiera con el `HEAD` de la carpeta, la ficha lo diría.
+3. **Tecnología.** Lenguaje, marco, imagen Docker y las bibliotecas que importan de verdad. Las dependencias heredadas de una plantilla y que nadie llama se mencionan como resto, no como stack vigente.
+4. **Árbol.** Un bloque de texto hasta el nivel de módulo, con un comentario corto por carpeta, y uno o dos párrafos que explican por qué está organizado así.
+5. **Archivos clave.** Ruta relativa a la raíz del lanzador y, a la derecha, para qué sirve. El primero es siempre el punto de entrada.
+6. **Contratos.** Dos tablas: lo que el repositorio **expone** (sujeto NATS, función importable o endpoint HTTP) y lo que **consume**. Columnas: contrato, entrada, salida, archivo. Las listas globales viven en el [Anexo C](#anexo-c-patrones-nats) y el [Anexo D](#anexo-d-endpoints-http-del-gateway); la ficha no las copia.
+7. **Configuración.** Tabla de clave o variable, valor que se usa y efecto. El catálogo completo está en el [Anexo B](#anexo-b-variables-de-entorno).
+8. **Pruebas.** El comando exacto, qué cubren y el resultado registrado al investigar. Si no hay pruebas, la ficha lo dice.
+9. **Trampas.** Invariantes que el código sostiene y problemas conocidos. No es una lista de deseos: es lo que ya rompió a alguien o lo que el código hace distinto de lo que parece.
+
+Las rutas van siempre desde la raíz del lanzador, entre comillas invertidas, por ejemplo `pba-ms-robotics/src/sequence/sequence_service.py`. Nunca se escriben relativas al repositorio (`src/app.py` suelta es un error). Los nombres de funciones, sujetos NATS y variables aparecen tal como están en el programa, aunque mezclen inglés y español.
+
+Esta sección no es una ficha: no tiene `8.1` ni contratos. Su trabajo es ahorrar al lector la sorpresa de que el turno no se reexplica aquí. El mapa de servicios está en [5](#5-mapa-de-servicios), el turno en [6.3](#63-chat-por-la-ruta-complejo-el-turno) y dónde se guarda cada dato en [7](#7-datos-y-persistencia). Cuando una ficha necesita ese contexto, enlaza; no lo vuelve a narrar.
 
 ### 9. pba-launcher
 
-<!-- pendiente: tarea 10 -->
+#### 9.1 Propósito
+
+El lanzador es la carpeta que se clona para tener R-ONE entero. Agrupa los repositorios del semillero como submódulos y aporta lo que ninguno de ellos tiene por sí solo: el `docker-compose.yml` de los nueve servicios, la plantilla `.env.template`, la configuración de NATS y los scripts de arranque en red local, Wi-Fi de campo y Bluetooth. No contiene código de negocio. Un cambio de interfaz va en `pmas-web-main`; un cambio del turno, en `pmai-mai-core`; un cambio del prompt, en `pmai-model-vision-language`.
+
+Dicho de otro modo, el lanzador es el maletín: dentro van las herramientas, el plano de cómo se enchufan y las instrucciones de apertura. También guarda la identidad de producto (`PRODUCT.md`, `DESIGN.md`) y la documentación larga en `docs/project-docs/`. El mapa corto para quien trabaja con agentes está en `AGENTS.md`.
+
+#### 9.2 Versión
+
+Según la tabla [Versión documentada](#versión-documentada), el lanzador se leyó en la rama `main`, commit `28900f3`, el 2026-11-05. Los punteros de submódulo del índice coinciden con el `HEAD` de cada carpeta. `pba-arduino-codes` está declarado en `.gitmodules` con rama `dev`, pero no tiene gitlink en el índice ni carpeta en el lanzador; el clon de trabajo usado para esta documentación vive fuera de git, pendiente de confirmar: no hay historia en el lanzador que explique por qué el firmware se declaró y no se clonó.
+
+#### 9.3 Tecnología
+
+El orquestador es Docker Compose, sin clave `version` en el archivo. Las imágenes tomadas tal cual son `postgres:17.1-alpine` y `nats:2.12.5-alpine3.22`. Las demás se construyen: `node:22-slim` para gateway, auth y la web; `python:3.12-slim` para `pmai-core`; `python:3.13-slim` para el estudio y robótica. Los scripts son Bash con `set -euo pipefail`; `scripts/bt-up.sh` incrusta un programa Python 3 que habla con `bluetoothctl` por la entrada estándar.
+
+En el anfitrión los scripts esperan `ip`, `docker`, y, según el caso, `ufw`, `nc`, `xdg-open`, `nmcli`, `bluetoothctl` y `pactl`. En la Jetson quedó Docker Engine 29.9.2 y Compose v5.6.1. El archivo `LICENSE` de la raíz tiene el mismo tamaño que el de la web, el gateway y auth; el tipo exacto queda pendiente de confirmar: no se abrió el texto.
+
+#### 9.4 Árbol
+
+```text
+pba-launcher/
+  docker-compose.yml              # nueve servicios, puertos y montajes
+  .env.template                   # plantilla de variables; se copia a .env
+  nats.conf                       # una línea: monitor HTTP de NATS en 8222
+  .dockerignore                   # contexto de construcción de pmai-core
+  .gitmodules                     # submódulos y sus ramas
+  scripts/                        # arranque, red, Bluetooth y siembra
+  pba-ms-auth/                    # usuarios, roles, JWT y Postgres
+  pba-ms-gateway/                 # única puerta HTTP y WebSocket
+  pba-ms-management/              # ruta Básico o Complejo del chat
+  pba-ms-robotics/                # voz, secuencias y Arduino
+  pmai-mai-core/                  # cámaras, micrófono y turno
+  pmai-model-context/             # BLIP; paquete model_context
+  pmai-model-vision-language/     # Milvus, prompt, OpenAI o Gemma
+  pmai-model-vision/              # entrenamiento del detector
+  pmas-web-main/                  # interfaz Angular
+  pmas-web-motion-studio/         # estudio de secuencias
+  data/                           # videos de prueba y milvus vacío
+  docs/                           # documentación larga y planes
+  AGENTS.md                       # mapa corto para agentes
+  README.md                       # comandos de arranque
+  PRODUCT.md  DESIGN.md           # producto e identidad visual
+```
+
+La organización sigue una regla: cada carpeta de primer nivel, salvo `docs/` y `scripts/`, es un repositorio propio. El lanzador no mezcla el código de uno dentro de otro. `data/` se monta en `pmai-core` y guarda los videos con los que se simulan cámaras; `docs/` concentra la memoria, la ficha de la Jetson y este documento. Los archivos sueltos de la raíz son el contrato de arranque: Compose, variables, NATS y el mapa para humanos y agentes.
+
+Además de eso hay reglas para agentes en `.cursor/rules/`, tres configuraciones de depuración por attach en `.vscode/launch.json` (gateway 9230, auth 9231, management 9232) y, en la Jetson, alias `rone-*` definidos en `~/.bashrc` del usuario `jetson` que apuntan a estos mismos scripts.
+
+#### 9.5 Archivos clave
+
+| Ruta | Propósito |
+|---|---|
+| `docker-compose.yml` | Punto de entrada del sistema: servicios, puertos, montajes y variables |
+| `.env.template` | Plantilla que el `README.md` pide copiar a `.env` |
+| `nats.conf` | Habilita el monitor HTTP de NATS en 8222 |
+| `.dockerignore` | Excluye `.git`, `data`, `.env` y `node_modules` del contexto de `pmai-core` |
+| `scripts/lan-up.sh` | Arranque completo en LAN: IP, UFW, Postgres, migraciones, siembra y Compose |
+| `scripts/lan-down.sh` | `compose stop`; los contenedores siguen creados |
+| `scripts/lan-restart.sh` | Para y vuelve a arrancar los mismos contenedores, sin recrearlos |
+| `scripts/wifi-up.sh` | Unirse a un Wi-Fi o encender el hotspot y luego `lan-up.sh` |
+| `scripts/bt-up.sh` | Emparejar el parlante Bluetooth en el PulseAudio del anfitrión |
+| `scripts/seed-auth.sh` | Migraciones Prisma y usuarios administradores |
+| `scripts/seed-conocimiento.sh` | Carga de `preguntas_respuestas.json` en la colección `conocimiento` |
+| `AGENTS.md` | Repositorios, el turno y el arranque que no hay que romper |
+| `README.md` | Comandos de arranque |
+| `docs/project-docs/jetson-orin-nano-r-one.md` | Ficha y bitácora de la Jetson Orin Nano |
+
+#### 9.6 Contratos
+
+El lanzador no implementa sujetos NATS ni endpoints. Lo que publica en el anfitrión son los puertos de Compose; el detalle de cada servicio está en [5.1](#51-servicios-y-puertos). El puerto de clientes de NATS, el 4222, no se publica: solo existe dentro de la red de Docker como `nats://nats-server:4222`. `scripts/lan-up.sh` abre en UFW únicamente 3000, 4200 y 4210.
+
+| Expuesto | Entrada | Salida | Archivo |
+|---|---|---|---|
+| `db` en 5432 | variables `DB_USER`, `DB_PASSWORD`, `DB_NAME` | Postgres con `pg_isready` | `docker-compose.yml` |
+| `nats-server` en 8222 | `nats.conf` | monitor HTTP; clientes en 4222 interno | `docker-compose.yml` |
+| `pba-ms-gateway` en 3000 y 9230 | `.env` | HTTP y depuración Node | `docker-compose.yml` |
+| `pmas-web-main` en 4200 | `WEB_MAIN_PORT` | `ng serve` | `docker-compose.yml` |
+| `pmas-web-motion-studio` en 4210 | `MOTION_STUDIO_PORT` | Uvicorn del estudio | `docker-compose.yml` |
+| `pmai-core` contexto `.` | tres repositorios | imagen con núcleo, BLIP y modelo de acción | `pmai-mai-core/Dockerfile.dev` |
+
+La imagen de `pmai-core` se construye desde la raíz del lanzador, no desde `pmai-mai-core/`. El Dockerfile copia `pmai-mai-core`, `pmai-model-context` y `pmai-model-vision-language` y los instala con pip; Compose por eso pone `context: .` y `dockerfile: pmai-mai-core/Dockerfile.dev`. De ahí que `.dockerignore` viva en la raíz y excluya `data` y `.env`. En ejecución, Compose monta el núcleo en `/app`, el contexto en `/opt/model-context` y el modelo de acción en `/opt/action-model`, y deja `PYTHONPATH` en `/opt/model-context:/opt/action-model:/app/src`. Recortar esa ruta a `/app/src` deja al núcleo sin BLIP ni `responder()`.
+
+| Consumido | Entrada | Salida | Archivo |
+|---|---|---|---|
+| `compose up -d db nats-server` y espera de Postgres | hasta 90 s | base lista | `scripts/lan-up.sh` |
+| `npx prisma migrate deploy` y `npx prisma db seed` en auth | contenedor `pba-ms-auth` | esquema `auth` y administradores | `scripts/lan-up.sh`, `scripts/seed-auth.sh` |
+| `python -m utils.context_builder.cargar_preguntas` | JSON de preguntas | colección `conocimiento` | `scripts/seed-conocimiento.sh` |
+| `nmcli` (join o hotspot) y luego `lan-up.sh` | SSID o conexión `Hotspot` | red de campo y stack arriba | `scripts/wifi-up.sh` |
+| `bluetoothctl` y `pactl` | nombre `Thinkplus-K3-pro` o `RONE_BT_DEVICE` | sink `bluez` por defecto | `scripts/bt-up.sh` |
+
+Los siete scripts cubren el ciclo de operación. `scripts/lan-up.sh` detecta la IPv4 de LAN (respeta `LAN_IFACE`, omite `docker*`, `br-*` y direcciones `169.254.*`, y prefiere la ruta de salida), abre UFW si existe, espera Postgres y auth, aplica migraciones, siembra Milvus y levanta el resto; los argumentos se pasan a `compose up -d`. `scripts/lan-down.sh` y `scripts/lan-restart.sh` usan `stop` y `start`, no `down`: los contenedores no se recrean y un cambio de `.env` no aplica. `scripts/wifi-up.sh` entiende `scan`, `status`, `join` y `hotspot` (SSID esperado `Jetson_Orin_Hot`) y recuerda que no hace falta editar `environment.ts` porque la web llama a `http://<hostname>:3000`. `scripts/bt-up.sh` entiende `scan`, `status`, `connect` y `disconnect`, guarda el último MAC y recuerda reiniciar robótica si la voz ya estaba arriba. `scripts/seed-auth.sh` exige Postgres con usuario fijo `postgres`. `scripts/seed-conocimiento.sh` es idempotente: si `pmai-core` corre usa `compose exec`; si no, `compose run --rm`.
+
+En la Jetson, `rone-up`, `rone-down`, `rone-restart`, `rone-wifi`, `rone-bt`, `rone-status` y `rone-seed` apuntan a estos scripts. No hay alias para `seed-conocimiento.sh`. El arranque paso a paso está en la [sección 22](#22-arranque-local-y-en-red-local).
+
+#### 9.7 Configuración
+
+La lista completa de variables está en el [Anexo B](#anexo-b-variables-de-entorno). Aquí solo las que el lanzador impone o que suelen romperse al copiar la plantilla.
+
+| Clave o variable | Valor | Efecto |
+|---|---|---|
+| `PMAI_CORE_PYTHONPATH` | `/opt/model-context:/opt/action-model:/app/src` | El núcleo importa `model_context` y `utils`; no recortar |
+| `PMAI_OPENAI_API_KEY` | vacía reusa `MS_MANAGEMENT_OPENAI_API_KEY` | Clave de `responder()` en `pmai-core` |
+| `NATS_SERVER` en Compose | `nats://nats-server:4222` (literal) | La plantilla no se usa; Compose fija el valor |
+| `MS_GATEWAY_SECRET` y `MS_AUTH_SECRET` | la misma cadena | Auth firma y el gateway verifica; si diferencian, el login “funciona” y el resto da 401 |
+| `MS_MANAGEMENT_CHAT_ROUTE_PATH` | en la plantilla, no en Compose | Management cae a `pba-ms-management/data/chat-route.json` |
+| `MILVUS_DB_PATH` | `/data/milvus/androide_milvus.db` | Compose la pasa; el código no la lee (ver [7.2](#72-milvus-lite)) |
+| `LAN_IFACE` | opcional | Fuerza la interfaz que anuncia `lan-up.sh` |
+| `RONE_BT_DEVICE` | `Thinkplus-K3-pro` | Nombre del parlante que busca `bt-up.sh` |
+| `MS_ROBOTICS_PULSE_SERVER` | `unix:/run/user/1000/pulse/native` | Socket de Pulse del UID 1000; otro usuario no oye |
+
+La plantilla no alcanza para arrancar gateway y auth: ambos exigen `SECRET`, `RESTORE_PASSWORD_SECRET` y `PROJECT_ID`, y `.env.template` no trae `MS_GATEWAY_SECRET`, `MS_GATEWAY_RESTORE_PASSWORD_SECRET`, `MS_GATEWAY_PROJECT_ID` ni `MS_AUTH_PROJECT_ID`. El comentario de Compose dice que la TTS de robótica reusa la clave de management si `MS_ROBOTICS_OPENAI_API_KEY` va vacía, pero Compose pasa esa variable tal cual, sin respaldo `:-`.
+
+#### 9.8 Pruebas
+
+El lanzador no tiene pruebas automatizadas propias. Las comprobaciones operativas que documenta la Jetson son `docker compose config -q`, `git submodule status`, `rone-status` y `rone-bt status`. El plan de arranque en LAN dejó sin ejecutar la lista de extremo a extremo en Ubuntu nativo. En esta investigación no se ejecutó ningún script.
+
+#### 9.9 Trampas
+
+`PMAI_CORE_PYTHONPATH` tiene que quedar con los tres directorios; los dos primeros son los montajes de contexto y del modelo de acción. La imagen de `pmai-core` se construye desde la raíz porque el Dockerfile copia esos tres repositorios: construirla con contexto `pmai-mai-core/` deja a pip sin BLIP ni Gemma.
+
+`lan-down.sh` no destruye contenedores. Quien cambie `.env` o Compose y luego haga `lan-restart.sh` sigue con la configuración vieja: hace falta `compose up -d --build` del servicio afectado. Management, robótica, la web y el estudio no declaran `depends_on`; el orden lo impone `lan-up.sh`, no Compose. Ese script siembra Milvus antes de levantar el resto, de modo que en un arranque en frío la siembra va por un contenedor de un solo uso y descarga ahí el modelo de embeddings.
+
+El socket de PulseAudio está fijo para el UID 1000. Sin la cookie montada, Pulse responde `Access denied` porque robótica corre como root. `seed-auth.sh` comprueba Postgres con `-U postgres` fijo, mientras `lan-up.sh` usa `${DB_USER:-postgres}`. El bloque `volumes:` de primer nivel declara cuatro volúmenes con nombre que ningún servicio usa; los `node_modules` son volúmenes anónimos.
+
+Tres puertos publicados no escuchan nada: auth 3001, management 3002 y `PMAI_CORE_PORT` 3004. Qué escucha `pmai-core` en 3004 queda pendiente de confirmar: una búsqueda de servidor HTTP en `pmai-mai-core/src` no encontró ninguno; el video llega por NATS y el WebSocket del gateway. Si robótica abre un depurador en 9233 también queda pendiente de confirmar: Compose publica el puerto y `debugpy` está en las dependencias, pero el comando es Uvicorn sin `debugpy`.
+
+No se edita `pmas-web-main/src/environments/environment.ts` al cambiar de red: la web arma el gateway con el hostname de la página. En la Jetson, Docker 28 o posterior necesita la variable de entorno que desactiva iptables raw, porque el kernel de JetPack 6.2 no trae ese módulo, y la ruta por defecto no debe ser la IP estática heredada del kit Yahboom (`192.168.1.1`). El detalle operativo está en `docs/project-docs/jetson-orin-nano-r-one.md`.
 
 ### 10. pmas-web-main
 
-<!-- pendiente: tarea 10 -->
+#### 10.1 Propósito
+
+`pmas-web-main` es la mesa de control de R-ONE en el navegador: login, panel de movimientos, visión, chat (con la elección Básico o Complejo y la pestaña «Decir oración»), estudio de secuencias incrustado, administración de usuarios y las páginas públicas del semillero. Toda llamada de datos va al gateway por HTTP o WebSocket; el único otro origen es el estudio, cargado en un `iframe`. La web no ejecuta el turno, no habla con NATS y no captura el audio del robot.
+
+Se parece a un tablero de avión: muestra instrumentos y envía mandos, pero el vuelo lo hacen los servicios de atrás. Por eso un fallo de OpenAI se ve aquí como «Error al conectar con el robot.», aunque el origen esté en management o en el núcleo.
+
+#### 10.2 Versión
+
+Rama `dev`, commit `8e3c3fb`, 2026-10-27, según la tabla [Versión documentada](#versión-documentada). El puntero del lanzador coincide con el `HEAD` de la carpeta.
+
+#### 10.3 Tecnología
+
+Angular 21.2 con componentes independientes y señales, constructor `@angular/build:application` y entrada `pmas-web-main/src/main.ts`. RxJS ~7.8, TypeScript ~5.9.2, Tailwind CSS 4.1 y `qrcode` 1.5.4 para el código QR de red. Las pruebas se declaran con Vitest 4 y jsdom 28 a través de `@angular/build:unit-test`. La imagen es `node:22-slim`. Las fuentes Space Grotesk, Inter y Material Symbols Outlined se cargan desde Google Fonts; el documento está en español.
+
+Compose sirve el servidor de desarrollo (`npm run start -- --host 0.0.0.0 --port ${WEB_MAIN_PORT} --poll 2000`) con `NODE_OPTIONS=--max-old-space-size=4096`. Tras cambiar dependencias hay que reconstruir el servicio, porque `node_modules` vive en un volumen anónimo.
+
+#### 10.4 Árbol
+
+```text
+pmas-web-main/src/
+  main.ts                         # bootstrapApplication
+  app/app.ts                      # raíz; plantilla en línea con router-outlet
+  app/app.routes.ts               # todas las rutas y guards
+  app/core/constants/             # GATEWAY_URL y MOTION_STUDIO_URL
+  app/core/guards/                # authGuard, guestGuard, roleGuard
+  app/core/interceptors/          # token, X-Active-Role, cierre por 401 o 403
+  app/core/services/              # sesión, salud, hardware, QR, JWT
+  app/layouts/admin-shell/        # cascarón autenticado y cajón de runtime
+  app/components/                 # barra, menú, cajón, QR, salud
+  app/pages/login/                # correo y contraseña
+  app/pages/control-panel/        # gestos a mano y registro
+  app/pages/robotics-chat/        # chat, ruta, frases, estado del micrófono
+  app/pages/robotics-vision/      # WebSocket de cámaras
+  app/pages/sequences/            # iframe del estudio e importación legado
+  app/pages/admin/users/          # CRUD de usuarios, solo ADMIN
+  app/pages/home|team|projects/   # páginas públicas
+  app/pages/r-one/                # resto heredado; rutas que el gateway no tiene
+  environments/environment.ts     # compactMode y gatewayUrl de respaldo
+  styles.css                      # tokens de color y tipografía
+```
+
+La aplicación es plana a propósito: no hay estado global aparte de la sesión y de unos pocos almacenes en `localStorage`. Cada página habla con el gateway por su cuenta. El cascarón autenticado (`AdminShell`) envuelve el panel, el chat, la visión, las secuencias y los usuarios, y es quien enciende el sondeo del hardware y el QR de la primera visita. Las páginas públicas (`info`, `team`, `projects`) viven fuera de ese cascarón, detrás de `guestGuard`.
+
+#### 10.5 Archivos clave
+
+| Ruta | Propósito |
+|---|---|
+| `pmas-web-main/src/main.ts` | Punto de entrada; arranca `App` con `appConfig` |
+| `pmas-web-main/src/app/app.config.ts` | Router y `provideHttpClient` con `authInterceptor` |
+| `pmas-web-main/src/app/app.routes.ts` | Rutas, guards y metadatos del menú |
+| `pmas-web-main/src/app/core/constants/gateway.ts` | `GATEWAY_URL` en el puerto 3000 del hostname de la página |
+| `pmas-web-main/src/app/core/constants/motion-studio.ts` | `MOTION_STUDIO_URL` en el puerto 4210 |
+| `pmas-web-main/src/app/core/services/auth.service.ts` | Login, perfil, rol activo y cierre de sesión |
+| `pmas-web-main/src/app/core/interceptors/auth.interceptor.ts` | Cabeceras `Authorization` y `X-Active-Role` |
+| `pmas-web-main/src/app/core/services/hardware-runtime.service.ts` | Sondeo de `GET /sequence/runtime` y apertura del cajón |
+| `pmas-web-main/src/app/pages/robotics-chat/robotics-chat.ts` | Chat, selector de modelo, turnos y «Decir oración» |
+| `pmas-web-main/src/app/pages/robotics-vision/vision-websocket.service.ts` | Cliente del WebSocket de visión |
+| `pmas-web-main/src/app/pages/control-panel/control-panel.ts` | Panel Gesto o Neutro |
+| `pmas-web-main/src/app/pages/sequences/sequences.ts` | `iframe` del estudio y `postMessage` del token |
+| `pmas-web-main/src/app/pages/admin/users/users.ts` | Alta, edición y baja de usuarios |
+| `pmas-web-main/src/styles.css` | Tokens navy, cian y esmeralda |
+
+#### 10.6 Contratos
+
+La web no expone API. Expone rutas de Angular y consume el gateway. El listado HTTP completo está en el [Anexo D](#anexo-d-endpoints-http-del-gateway).
+
+| Ruta | Guard | Componente |
+|---|---|---|
+| `''` exacta | — | redirige a `info` |
+| `login`, `register` | `guestGuard` | `Login`, `Register` |
+| `info`, `team`, `projects` | `guestGuard` | páginas públicas |
+| `''` padre | `authGuard` | `AdminShell` con hijos |
+| `control-panel` | hereda | panel de movimientos |
+| `robotics/chat` | hereda | chat |
+| `robotics/vision` | hereda | visión |
+| `sequences` | hereda | estudio incrustado |
+| `admin/users` | `authGuard` y `roleGuard` | usuarios; solo `ADMIN` |
+| `profile`, `iframe` | hereda | perfil y visor genérico |
+| `r-one` | ninguno | resto heredado |
+| `**` | — | redirige a `info` |
+
+`authGuard` deja pasar si hay token con `exp` futuro, decodificado en el navegador sin verificar la firma; si el token venció, llama a `logout('expired')` y manda a `/login`. `guestGuard`, con sesión y `compactMode` verdadero (el valor actual), redirige a `/control-panel`. `roleGuard` exige que el nombre del rol activo sea `ADMIN`. El menú lateral muestra Usuarios solo con ese rol; en modo compacto el cascarón usa una barra inferior con Movimientos, Visión, Chat y Secuencias.
+
+Hacia el estudio, la página `/sequences` escucha `prometeo-auth-request` y responde `prometeo-auth` con token, `GATEWAY_URL` y rol activo, solo si el hostname del origen coincide con el de la página. El `iframe` carga `http://<hostname>:4210/?embed=1`. El flujo de creación está en [6.7](#67-creación-e-ingesta-de-una-secuencia).
+
+| Consumido | Entrada | Salida | Archivo |
+|---|---|---|---|
+| `POST /auth/login` | `{ username, password }` | `{ accessToken }` | `pmas-web-main/src/app/core/services/auth.service.ts` |
+| `GET /auth/me` | Bearer y `X-Active-Role` | perfil con roles | `pmas-web-main/src/app/core/services/auth.service.ts` |
+| `POST /chat/question` | `{ message }` | `{ reply, fuente, movimientos }` | `pmas-web-main/src/app/pages/robotics-chat/robotics-chat.ts` |
+| `GET` y `PATCH /chat/route…` | modelo o `enabled` | `{ automationEnabled, selectedModel }` | `pmas-web-main/src/app/pages/robotics-chat/robotics-chat.ts` |
+| `GET /sequence/runtime` | — | `{ busy, source, current, queue }` | `pmas-web-main/src/app/core/services/hardware-runtime.service.ts` |
+| `POST /sequence/play` y `POST /sequence/stop` | `{ name, mode, source: 'panel' }` o `{}` | estado | panel y cajón |
+| `ws://<host>:3000/vision/ws` | `access_token` y `activeRole` en la consulta | `snapshot` cada 500 ms | `pmas-web-main/src/app/pages/robotics-vision/vision-websocket.service.ts` |
+| `GET /audio/listening-status` | cada 500 ms | fase, nivel y última frase | chat |
+| `GET\|POST\|PATCH /voice/phrases` y `POST /voice/speak` | frases de «Decir oración» | catálogo y `spoken` | chat |
+| `GET\|POST\|PUT\|PATCH /users…` | CRUD; `role_ids` y persona | listado o alta | `pmas-web-main/src/app/pages/admin/users/users.ts` |
+
+El login está en [6.1](#61-inicio-de-sesión); el chat, en [6.2](#62-chat-por-la-ruta-básico) y [6.3](#63-chat-por-la-ruta-complejo-el-turno); el micrófono del robot, en [6.4](#64-el-micrófono); los gestos a mano, en [6.5](#65-ciclo-de-un-gesto); la visión, en [6.6](#66-visión-en-tiempo-real). Ningún botón llama a `POST /chat/poema`.
+
+Hay una sesión por usuario, pero no la impone la web: la impone auth al dar de baja la sesión anterior (ver [12.9](#129-trampas)). La web guarda un solo `prometeo_token` y, ante cualquier 401 o 403 de una ruta no pública, cierra con «Tu sesión venció. Entra de nuevo.». Por eso un USER que intenta una acción de ADMIN también termina en el login, y por eso entrar en el teléfono saca al portátil.
+
+#### 10.7 Configuración
+
+| Clave o variable | Valor | Efecto |
+|---|---|---|
+| `GATEWAY_PORT` | 3000, fijo en código | La web no lee `MS_GATEWAY_PORT` |
+| `MOTION_STUDIO_PORT` | 4210, fijo en código | La web no lee `MOTION_STUDIO_PORT` |
+| `environment.compactMode` | `true` | Barra inferior de robótica; con sesión no hay landing |
+| `environment.gatewayUrl` | `http://localhost:3000` | Solo respaldo fuera del navegador |
+| `WEB_MAIN_PORT` | 4200 | Puerto de `ng serve` |
+| `prometeo_token` | `localStorage` | JWT de acceso |
+| `prometeo_active_role` | `localStorage` | UUID del rol activo |
+| `prometeo_login_flash` | `sessionStorage` | Aviso de sesión vencida |
+| `pmas.lanQrShown` | `localStorage` | El QR de red ya se mostró |
+
+El catálogo de variables del contenedor está en el [Anexo B](#anexo-b-variables-de-entorno). Cambiar 3000 o 4210 en `.env` y no en estos dos archivos deja la interfaz hablando con nadie. El QR comparte `window.location.origin` y se abre en la primera visita al cascarón.
+
+#### 10.8 Pruebas
+
+El comando del paquete es `npm test`, que ejecuta `ng test` con Vitest. Hay 27 archivos `*.spec.ts`: la mayoría leen el código fuente con `node:fs` y comprueban textos; otras prueban funciones puras (`hardware-runtime`, `jwt-exp`, `sequence-groups`, `origin-sequence`, `microphone-status`).
+
+Resultado registrado el 2026-11-05 en el anfitrión: `npx ng test --watch=false` no corre ninguna prueba. La compilación falla con 57 errores TypeScript (no encuentra `node:fs` ni `import.meta.dirname`; un objeto de prueba de hardware no trae `remaining_ms` ni `blocks`). Si esas pruebas compilan dentro del contenedor queda pendiente de confirmar: no se ejecutaron en Docker.
+
+#### 10.9 Trampas
+
+Los puertos 3000 y 4210 están hardcodeados. `GATEWAY_URL` se arma con el hostname de la página y el 3000; `MOTION_STUDIO_URL`, con el 4210. En LAN eso es una ventaja (el teléfono abre `http://jetson-w4.local:4200` y llama a `:3000` en el mismo host), pero un cambio de puerto en Compose no arrastra a la web.
+
+El cajón «En hardware» es un botón flotante siempre visible en el cascarón. Sondea `GET /sequence/runtime` cada 500 ms si el robot está ocupado o el cajón abierto, y cada 3 s si no. Se abre solo cuando empieza una racha `busy` con `source: 'turno'`; si el usuario lo cierra, no vuelve a abrirse en esa misma racha. Muestra el paso actual (Gesto, Neutro o «Pausa de 1 s»), el tiempo restante y la cola. Detener llama a `POST /sequence/stop`. Por las dos instancias de `SequenceService` en robótica (ver [14.9](#149-trampas)), ese cajón y ese Detener no ven los gestos del turno.
+
+El selector Básico o Complejo vive bajo la caja del chat y escribe en el gateway: la elección es del sistema, no del navegador. Complejo solo aparece si los turnos están encendidos; la casilla de turnos solo la ve un ADMIN. La web siempre llama a `POST /chat/question`; quien decide la ruta es management. El micrófono del chat es `webkitSpeechRecognition` del navegador, solo para llenar la caja; el micrófono del robot lo muestra el estado de `GET /audio/listening-status`.
+
+Cualquier 401 o 403 no público cierra la sesión. Las fuentes de Google Fonts no cargan en el hotspot sin internet. La página `register` simula el envío y no crea cuentas. La ruta `r-one` llama a `/robotics/execute` y `/robotics/health`, que el gateway no tiene. `pmas-web-main/src/app/app.html` no se usa: el componente raíz tiene la plantilla en línea.
 
 ### 11. pba-ms-gateway
 
-<!-- pendiente: tarea 10 -->
+#### 11.1 Propósito
+
+El gateway es la única puerta HTTP y WebSocket de la interfaz. Valida el JWT, la sesión activa y el rol, valida el cuerpo con `class-validator` y traduce cada petición a un mensaje NATS hacia `AUTH_MS`, `MANAGEMENT_MS`, `ROBOTICS_MS` o `MAI_CORE_MS`. No tiene lógica de negocio propia salvo el empuje periódico de la instantánea de visión por WebSocket. Usa Prisma solo para leer la tabla `session` en `GET /auth/me` y `GET /auth/verify`.
+
+Es la recepción del edificio que describe [4.1](#41-microservicios-y-gateway): el navegador no conoce las direcciones internas y no debería. Toda seguridad de la interfaz se revisa aquí. El puerto de clientes de NATS (4222) no se publica en el anfitrión, de modo que desde la red local nadie envía mensajes a robótica o al núcleo saltándose esta puerta.
+
+#### 11.2 Versión
+
+Rama `dev`, commit `3f38ec9`, 2026-10-19, según la tabla [Versión documentada](#versión-documentada). El puntero del lanzador coincide.
+
+#### 11.3 Tecnología
+
+NestJS 11 sobre Fastify, adaptador WebSocket `ws`, transporte NATS, Passport (`passport-jwt` y `passport-local`), Prisma 7 con adaptador Postgres y validación de entorno con Joi. Hay un limitador `ThrottlerModule` (10 peticiones por 60 s) que no se aplica: el módulo se registra y no hay ningún guard que lo haga efectivo. `@fastify/multipart` admite un archivo de hasta 200 MB; `@fastify/http-proxy` se importa y no se usa. TypeScript ^5.7.2, imagen `node:22-slim`. El `name` del paquete es `ensename`, herencia de otra plantilla.
+
+#### 11.4 Árbol
+
+```text
+pba-ms-gateway/src/
+  main.ts                         # Fastify, CORS, pipes, WebSocket, puerto 3000
+  app.module.ts                   # raíz; ThrottlerModule, NATS, Prisma, módulos MS
+  app.controller.ts               # GET /health
+  transports/                     # cliente NATS_SERVICE
+  auth/strategies/                # jwt, local, password-reset, refresh-token
+  auth/guards/                    # acceso global, JWT con sesión, roles, /auth/me
+  core/                           # nombres MS, Prisma, filtros RPC, ajustes
+  auth-ms/                        # reenvío a AUTH_MS (auth, users, person, roles…)
+  management-ms/                  # chat, poema, ruta
+  robotics-ms/                    # action, voice, sequence
+  mai-core-ms/                    # audio, camera, monitoring, vision HTTP y WS
+pba-ms-gateway/prisma/            # copia del esquema auth; sin migraciones
+pba-ms-gateway/test/              # cuatro pruebas node:test que leen el código
+```
+
+El árbol copia la forma de los microservicios a los que habla: un módulo por destino NATS, y dentro de cada uno un controlador por recurso HTTP. El módulo `auth/` no es `auth-ms/`: el primero es la seguridad del propio gateway (Passport y guards); el segundo reenvía a `pba-ms-auth`. Prisma aquí no es dueño del esquema: en cada arranque `prisma db pull` regenera `schema.prisma` contra la base de auth. Los tipos generados se usan para el modelo `session` en los guards y para el enum `Roles` en `@HasRoles`. El gateway no corre migraciones: si arranca antes de que auth las aplique, el `db pull` vería una base vacía. En el arranque normal eso no ocurre porque `scripts/lan-up.sh` migra auth primero.
+
+#### 11.5 Archivos clave
+
+| Ruta | Propósito |
+|---|---|
+| `pba-ms-gateway/src/main.ts` | Punto de entrada; escucha en `0.0.0.0` y `PORT` o 3000 |
+| `pba-ms-gateway/src/app.module.ts` | Ensambla config, NATS, Prisma y los cuatro módulos MS |
+| `pba-ms-gateway/src/auth/auth.module.ts` | `UserAccessGuard` global y `UserAccessInterceptor` |
+| `pba-ms-gateway/src/auth/guards/user-access.guard.ts` | Primer candado: Bearer, firma y usuario no dado de baja |
+| `pba-ms-gateway/src/auth/guards/jwt.guard.ts` | `JwtAuthGuard`: JWT, sesión idéntica al token y rol activo |
+| `pba-ms-gateway/src/auth/guards/roles.guard.ts` | Compara `X-Active-Role` con `@HasRoles` |
+| `pba-ms-gateway/src/auth/guards/jwt-me.guard.ts` | Sesión leída con Prisma para `/auth/me` |
+| `pba-ms-gateway/src/transports/nats.module.ts` | Cliente NATS, tiempo límite 20 s |
+| `pba-ms-gateway/src/core/filters/rpc-exception.filter.ts` | Errores RPC a HTTP |
+| `pba-ms-gateway/src/mai-core-ms/vision/vision.gateway.ts` | WebSocket `/vision/ws` |
+| `pba-ms-gateway/src/robotics-ms/sequence/dto/sequence.dto.ts` | Validación de secuencias y reproducción |
+
+#### 11.6 Contratos
+
+El gateway no pone prefijo global: la ruta es `http://<host>:3000/<controlador>/<ruta>`. La lista completa de endpoints, guards y sujetos NATS está en el [Anexo D](#anexo-d-endpoints-http-del-gateway); los sujetos, además, en el [Anexo C](#anexo-c-patrones-nats). Aquí basta el resumen por familia y los contratos que el resto de esta parte necesita.
+
+| Familia HTTP | Guard típico | Destino NATS | Para qué |
+|---|---|---|---|
+| `GET /health` y `GET /*-ms/health` | pública | el servicio o ninguno | semáforo de la web |
+| `POST /auth/login` y restauración | pública o `LocalAuthGuard` | `AUTH_MS.authService.*` | [6.1](#61-inicio-de-sesión) |
+| `GET /auth/me`, `GET /auth/verify` | `JwtMeAuthGuard` | `getProfile` | perfil antes de elegir rol |
+| `/users`, `/roles` | ADMIN | `AUTH_MS.usersService.*`, `rolesService.*` | mesa de usuarios |
+| `/chat/question`, `/chat/poema`, `/chat/route` | JWT; automation es ADMIN | `MANAGEMENT_MS.chatService.*` | [6.2](#62-chat-por-la-ruta-básico), [6.3](#63-chat-por-la-ruta-complejo-el-turno), [6.8](#68-declarar-un-poema) |
+| `/action`, `/voice`, `/sequence` | JWT | `ROBOTICS_MS.*` | [6.5](#65-ciclo-de-un-gesto) y estudio |
+| `/audio`, `/camera`, `/monitoring`, `/vision` | JWT | `MAI_CORE_MS.*` | [6.4](#64-el-micrófono) y [6.6](#66-visión-en-tiempo-real) |
+| `ws://<host>:3000/vision/ws` | token en la consulta | `visionService.getSnapshot` cada 500 ms | visión en vivo |
+
+| Consumido | Entrada | Salida | Archivo |
+|---|---|---|---|
+| `ClientProxy.send` a `NATS_SERVICE` | `{ pattern, data }` | `{ response }` o `{ err }` | `pba-ms-gateway/src/transports/nats.module.ts` |
+| `AUTH_MS.authService.findOneSession` | `{ user_id }` | sesión activa o `null` | `JwtAuthGuard` y el WebSocket |
+| `AUTH_MS.usersService.findOne` | `{ id }` | usuario con roles | guards e interceptor |
+| `prisma.session.findFirst` | `user_id` y `deleted_at: null` | sesión | solo `JwtMeAuthGuard` |
+
+El cliente NATS reconecta sin límite, espera la primera conexión y tiene `timeout: 20000`. Ese tope es el que hace que un turno largo (Gemma hablando) llegue a la web como «Error al conectar con el robot.» aunque el robot sí hable; si esos 20 s alcanzan en la Jetson queda pendiente de confirmar: no se midió la duración de un turno.
+
+El login, visto desde esta puerta, es dos viajes a auth. `POST /auth/login` pasa por `LocalStrategy`, que llama a `AUTH_MS.authService.validateUser`; si vuelve `null` responde 401 «Email y/o contraseña incorrectos». Solo entonces el controlador pide `AUTH_MS.authService.login` y devuelve `{ accessToken }`. A continuación la web llama a `GET /auth/me`, que usa `JwtMeAuthGuard` (sesión leída con Prisma, sin exigir rol) y `AUTH_MS.authService.getProfile`. En cada petición siguiente el guard global y `JwtAuthGuard` vuelven a preguntar `findOneSession` y `usersService.findOne`. Los textos de error de sesión («Sesión no encontrada», «Esta sesión no se encuentra activa», «Sesión expirada», «No se ha especificado un rol activo») salen de `pba-ms-gateway/src/auth/guards/jwt.guard.ts`. El flujo completo está en [6.1](#61-inicio-de-sesión).
+
+El WebSocket `/vision/ws` no puede llevar cabeceras, así que el token y el rol van en la consulta. El gateway acepta la conexión, verifica firma, sesión y rol, y si falla envía `{ type: 'error' }` y cierra con código 4001. El estado inicial de cada cliente es sin cámara seleccionada, miniatura 480 y vista 640; cada 500 ms pide `MAI_CORE_MS.visionService.getSnapshot` y reenvía `{ type: 'snapshot', data }`. El cliente puede mandar `setSelection` y `setQuality`. El flujo está en [6.6](#66-visión-en-tiempo-real).
+
+`POST /person` es pública. `GET /action/execute` es un GET con efectos: mueve el robot. `PATCH /chat/route/automation` es el único cambio de ruta que pide ADMIN; el modelo lo puede cambiar cualquiera con sesión.
+
+#### 11.7 Configuración
+
+| Clave o variable | Valor | Efecto |
+|---|---|---|
+| `PORT` | `MS_GATEWAY_PORT` (3000) | Escucha HTTP; `main.ts` cae a 3000 si falta |
+| `DATABASE_URL` | misma base que auth, `?schema=auth` | Prisma lee `session` |
+| `SECRET` | obligatoria | Verifica el JWT que firmó auth |
+| `RESTORE_PASSWORD_SECRET` | obligatoria | Estrategia de restauración |
+| `NATS_SERVER` | `nats://nats-server:4222` | Cliente NATS |
+| `PROJECT_ID` | obligatoria | Joi la exige; ningún código del gateway la usa |
+| `NODE_ENV` | `development` | `configEnvs.environment` |
+
+CORS admite origen `*`, métodos GET, POST, PUT, PATCH, DELETE y OPTIONS, y las cabeceras `Content-Type`, `Authorization`, `X-Active-Role` y `Cache-Control`, con `credentials: true`. El `ValidationPipe` global transforma, limpia (`whitelist`) y rechaza campos de más (`forbidNonWhitelisted`) con 422 empaquetado como `RpcException`. Si un microservicio responde `statusCode >= 400`, `ErrorResponseInterceptor` copia ese código al HTTP. `RpcCustomExceptionFilter` convierte «Empty response» en 500 y el resto de `{ statusCode, message }` conserva su código. El arranque de depuración ejecuta `prisma db pull && prisma generate` antes de `nest start --debug 0.0.0.0:9230`. El `JwtModule` del gateway firma con `expiresIn: '8d'` por defecto, pero este servicio no firma tokens de acceso: solo los verifica. El resto de variables está en el [Anexo B](#anexo-b-variables-de-entorno).
+
+#### 11.8 Pruebas
+
+El `package.json` declara `npm test` → `jest`, sin configuración Jest. Las pruebas que sí corren son cuatro archivos `node:test` en `pba-ms-gateway/test` que leen el código como texto: el `RolesGuard` usa `x-active-role`, usuarios y roles llevan `HasRoles(Roles.ADMIN)`, el enum `Roles` no tiene `STUDENT` ni `TEACHER`, y la miniatura de visión por defecto es 480 con tope 960.
+
+Resultado el 2026-11-05: `node --test test/*.test.cjs` dentro de `pba-ms-gateway`, Node 24.13.0, 6 pruebas, 6 aprobadas. `pba-ms-gateway/src/robotics-ms/sequence/dto/sequence.dto.spec.ts` es una prueba Jest de los DTO de secuencia; no se ejecutó.
+
+#### 11.9 Trampas
+
+La cadena de guards corre en este orden. Primero `UserAccessGuard` (Bearer, firma, usuario no dado de baja), salvo `@Public()` o `@SkipAccessGuard()`. Después `JwtAuthGuard` exige que la sesión de la base sea la misma (`session.token === token`), que no haya vencido y que `X-Active-Role` sea un id de rol asignado. Por último `RolesGuard` compara el nombre de ese rol con `@HasRoles`. `GET /document-types` solo pasa el guard global, así que acepta un JWT válido aunque su sesión ya no sea la activa. `GET /auth/me` usa `JwtMeAuthGuard` y no pide rol, para que la web cargue el perfil antes de elegir.
+
+`PATCH /chat/route/model` no pide ADMIN: cualquier usuario cambia Básico o Complejo para todos. `PATCH /app-settings/:id` tampoco pide ADMIN. `DELETE /person/:id` envía `AUTH_MS.personService.remove`, patrón que auth no atiende: la petición espera hasta el tiempo límite de NATS. `UserAccessInterceptor` busca `request.user.sub`, pero el JWT lleva `user.id`: el interceptor no hace su comprobación. `POST /auth/refresh-token` exige un token con `type: 'refresh'` que auth no emite.
+
+El JWT del WebSocket viaja en la URL. Cada cliente genera una petición NATS cada 500 ms aunque la anterior no haya terminado. `SaveSequenceDto` exige `blocks` y `blocks_neutro` con al menos un elemento, de modo que no se puede guardar un gesto sin neutro por HTTP. `StartPlaybackDto.source` solo acepta `panel` o `estudio`: el origen `turno` no entra por esta puerta. El secreto JWT del gateway tiene que ser el de auth, y llegan por variables distintas del `.env`.
+
+`prisma db pull` al arrancar sobreescribe `pba-ms-gateway/prisma/schema.prisma` dentro del contenedor con lo que haya en la base. Compose solo espera a que Postgres esté sano, no a que auth haya migrado; es `scripts/lan-up.sh` quien levanta y migra auth antes del resto. La estrategia local prevé un «primer ingreso» que devolvería `{ message, resetToken }`, pero `validateUser` nunca envía `requiresPasswordChange`, así que esa rama no se ejecuta. `POST /auth/refresh-token` queda, en la práctica, inalcanzable. La página heredada `r-one` llama a `/robotics/execute` y `/robotics/health`; no hay controlador `robotics` en este repositorio.
 
 ### 12. pba-ms-auth
 
-<!-- pendiente: tarea 10 -->
+#### 12.1 Propósito
+
+Auth es el microservicio dueño de usuarios, personas, roles, tipos de documento, ajustes y sesiones. Valida credenciales con bcrypt, firma el JWT de acceso, registra una sesión por usuario en Postgres y genera tokens de restauración de contraseña. No expone HTTP: se crea con `NestFactory.createMicroservice` sobre NATS, y todo acceso desde la interfaz pasa por el gateway. No envía correos, no sabe de robótica y no llama a otros microservicios.
+
+La analogía útil es la oficina de carnets de la universidad: guarda quién es quién, entrega la manilla firmada y anota que esa manilla es la única válida. El portero (el gateway) no guarda contraseñas; pregunta aquí. El modelo de datos está en [7.1](#71-postgres-y-prisma): una **persona** es alguien del semillero (documento, correo, nombre) y un **usuario** es la cuenta para entrar (contraseña, roles, sesiones). Así se puede registrar a alguien sin darle acceso, o darle de baja la cuenta sin borrar sus datos. Casi todas las tablas tienen `deleted_at`: las bajas son lógicas.
+
+#### 12.2 Versión
+
+Rama `dev`, commit `4c4802a`, 2026-10-14, según la tabla [Versión documentada](#versión-documentada). El puntero del lanzador coincide. Commits previos relevantes recortaron los roles a `ADMIN` y `USER` y dejaron los tipos de documento colombianos.
+
+#### 12.3 Tecnología
+
+NestJS 11 con transporte NATS (`nats` ^2.29.3), Prisma 7 con adaptador `@prisma/adapter-pg` sobre Postgres 17.1, `bcrypt` ^6.0.0, `@nestjs/jwt` y `dayjs` con zona `America/Bogota`. Validación de entorno con Joi. TypeScript ^5.7.2, imagen `node:22-slim`. El `name` del paquete es otra vez `ensename`. Hay dependencias sin uso en el flujo actual (`jwks-rsa`, `helmet`, `winston`, `axios`, `country-state-city`) y una estrategia de Google Identity Platform que ningún controlador activa.
+
+#### 12.4 Árbol
+
+```text
+pba-ms-auth/src/
+  main.ts                         # microservicio NATS; sin listen HTTP
+  app.module.ts                   # Auth, Users, Person, DocumentTypes, Roles
+  auth/                           # login, perfil, sesiones, restauración
+  auth/repositories/              # una sesión activa por usuario
+  users/                          # CRUD, baja, reactivación, persona embebida
+  person/                         # personas
+  roles/                          # ADMIN y USER
+  document-types/                 # cédula, tarjeta de identidad, otro
+  app-settings/                   # ajustes con vigencia e historial
+  core/                           # Prisma, DTO, enums, filtros, Joi
+  transports/                     # cliente NATS que nadie inyecta
+pba-ms-auth/prisma/
+  schema.prisma                   # modelos del esquema auth
+  migrations/                     # cuatro migraciones
+  seed.ts                         # tipos, roles, tres administradores, ajustes
+pba-ms-auth/test/                 # seis pruebas node:test
+```
+
+Cada recurso tiene controlador NATS, servicio y repositorio. `AppSettingsModule` no se importa en el módulo raíz: entra a través de `AuthModule` y `UsersModule`, porque el login y el alta leen ajustes. El cliente NATS existe y no se usa: auth no llama a nadie. Prisma es el dueño del esquema; el gateway solo copia.
+
+El JWT, además de identificar al usuario, lista los ids de rol, no los nombres. Eso obliga a la web a mandar `X-Active-Role` con un UUID en cada petición, y al gateway a resolver el nombre contra `usersService.findOne`. Un usuario puede tener varios roles; la web le muestra un selector después del login y, con uno solo, lo elige sola. El concepto está en [4.3](#43-sesión-y-jwt).
+
+#### 12.5 Archivos clave
+
+| Ruta | Propósito |
+|---|---|
+| `pba-ms-auth/src/main.ts` | Punto de entrada; `ValidationPipe` y filtros RPC |
+| `pba-ms-auth/src/auth/auth.service.ts` | `validateUser`, `login`, JWT, bloqueo, restauración |
+| `pba-ms-auth/src/auth/repositories/session.repository.ts` | Una sesión activa por usuario |
+| `pba-ms-auth/src/auth/services/password-generator.service.ts` | Reglas de contraseña y token de restauración |
+| `pba-ms-auth/src/users/users.service.ts` | Alta con persona, edición, baja y último ADMIN |
+| `pba-ms-auth/src/app-settings/app-settings.service.ts` | Ajustes versionados |
+| `pba-ms-auth/prisma/schema.prisma` | Modelos `person`, `user`, `session`, `role`, `user_role` |
+| `pba-ms-auth/prisma/seed.ts` | Siembra |
+| `pba-ms-auth/prisma.config.ts` | Esquema, migraciones, comando de siembra y `DATABASE_URL` |
+
+#### 12.6 Contratos
+
+Hay 31 `@MessagePattern` con prefijo `AUTH_MS`. La lista global está en el [Anexo C](#anexo-c-patrones-nats). Lo que el login y la sesión usan:
+
+| Expuesto | Entrada | Salida | Archivo |
+|---|---|---|---|
+| `AUTH_MS.healthService.health` | `{}` | `{ status: 'UP', msName: 'AUTH_MS' }` | `pba-ms-auth/src/app.controller.ts` |
+| `AUTH_MS.authService.validateUser` | `{ username, password }` | usuario con hash, o `null`; 401 si baja o bloqueo | `pba-ms-auth/src/auth/auth.service.ts` |
+| `AUTH_MS.authService.login` | `{ username }` | `{ accessToken }`; ignora `push_token` | `pba-ms-auth/src/auth/auth.service.ts` |
+| `AUTH_MS.authService.getProfile` | `{ id }` | usuario sin contraseña, con persona y roles | `pba-ms-auth/src/auth/auth.service.ts` |
+| `AUTH_MS.authService.findOneSession` | `{ user_id }` | sesión con `deleted_at: null`, o `null` | `pba-ms-auth/src/auth/repositories/session.repository.ts` |
+| `AUTH_MS.authService.requestNewPassword` | `{ email }` | `resetToken` en la respuesta; no envía correo | `pba-ms-auth/src/auth/auth.service.ts` |
+| `AUTH_MS.usersService.create` | persona, `username` correo, `role_ids` | 201 o reactivación si estaba dado de baja | `pba-ms-auth/src/users/users.service.ts` |
+| `AUTH_MS.usersService.inactive` | `{ user_id, reason }` | baja lógica; no a sí mismo ni al último ADMIN | `pba-ms-auth/src/users/users.service.ts` |
+
+Los demás patrones cubren listar y actualizar usuarios, personas, roles, tipos de documento y ajustes. `AUTH_MS.usersService.findAll` pagina con `skip` y `take` (máximo 100) y busca en `username`, nombre, apellido, correo y documento; solo lista quienes no están dados de baja. `findOne` acepta UUID o `username`, y un correo con forma de UUID se trataría como id. `updateAuthUser` rechaza dejar el sistema sin un ADMIN y, si la contraseña nueva coincide con la actual, no la cambia. Cambiar el `username` también cambia el correo de la persona.
+
+`AUTH_MS.personService.remove` no existe como patrón, aunque el servicio tenga el método: de ahí el `DELETE /person/:id` mudo del gateway. `AUTH_MS.countryService.findActive`, que un cliente de management sabe llamar, no existe. `AUTH_MS.rolesService.setRoles` borra los roles que ya no vienen y crea los nuevos en una transacción. `AUTH_MS.appSettingsService.update` no sobrescribe: marca la fila vigente con `deleted_at` y crea otra con su `start_at`. Los cuatro ajustes son `SESSION_EXPIRATION`, `LOCK_LOGIN_ATTEMPTS`, `LOCK_LOGIN_UNTIL` y `FRONT_END_URL`.
+
+| Consumido | Entrada | Salida | Archivo |
+|---|---|---|---|
+| Postgres vía Prisma | `DATABASE_URL` con `?schema=auth` | tablas del esquema `auth` | `pba-ms-auth/src/core/database/database.service.ts` |
+| NATS como servidor | `NATS_SERVER` | peticiones `@MessagePattern` | `pba-ms-auth/src/main.ts` |
+
+Quién llama: el gateway, en cada petición protegida y en el login. Management tiene un cliente hacia auth que no se importa en ningún módulo, así que en tiempo de ejecución no se usa.
+
+#### 12.7 Configuración
+
+| Clave o variable | Valor | Efecto |
+|---|---|---|
+| `SECRET` | obligatoria; igual que la del gateway | Firma el JWT de acceso |
+| `RESTORE_PASSWORD_SECRET` | obligatoria | Firma el token de restauración, 24 h, `type: 'password-reset'` |
+| `DATABASE_URL` | host `db`, esquema `auth` | Prisma |
+| `NATS_SERVER` | `nats://nats-server:4222` | Servidor del microservicio |
+| `PORT` | 3001 | Joi la exige; auth no escucha HTTP |
+| `PROJECT_ID` | obligatoria | Audiencia de la estrategia Google, sin uso real |
+| `SESSION_EXPIRATION` | `'8'` en la siembra | Horas de vida del JWT |
+| `LOCK_LOGIN_ATTEMPTS` | `'5'` | Fallos antes del bloqueo |
+| `LOCK_LOGIN_UNTIL` | `'0.25'` | Bloqueo de quince minutos |
+| `FRONT_END_URL` | `''` | El login la exige aunque esté vacía |
+
+El JWT lleva `{ user: { id, roles: [ids] } }`, firmado con `SECRET` y `expiresIn = <SESSION_EXPIRATION>h`. El `expiresIn: '8d'` del `JwtModule` es solo el valor por defecto: lo reemplaza `generateJwt`. Tras firmar, `login` crea `session { user_id, token, expires_at }` y marca `deleted_at` en las sesiones activas anteriores: una sola sesión por cuenta. El algoritmo exacto queda pendiente de confirmar: no se fija en el código; se asume el de `@nestjs/jwt` con secreto compartido. El resto de variables está en el [Anexo B](#anexo-b-variables-de-entorno).
+
+La siembra crea los tipos «Cédula de ciudadanía», «Tarjeta de identidad» y «Otro»; los roles `ADMIN` y `USER`; tres administradores (`admin-prometeo@unilibre.edu.co` y los números 2 y 3), cada uno con persona, cédula distinta, rol `ADMIN` e `is_first_login: false`; y los cuatro ajustes. Este documento no reproduce la contraseña. La ejecutan `scripts/lan-up.sh` y `scripts/seed-auth.sh`. Hay dos configuraciones de siembra (`package.json` apunta a un archivo que no existe; `prisma.config.ts` apunta a `pba-ms-auth/prisma/seed.ts`); cuál usa `npx prisma db seed` con Prisma 7 queda pendiente de confirmar: la Jetson sembró, lo que sugiere `prisma.config.ts`.
+
+#### 12.8 Pruebas
+
+`npm test` lanza Jest con `rootDir: "test"` y `testRegex: ".*\\.spec\\.ts$"`: en esa carpeta no hay `.spec.ts`, así que Jest no encuentra nada. Las pruebas reales son seis archivos `node:test` que leen el código: la contraseña se valida en texto plano antes del hash, la siembra tiene los tres tipos colombianos, el primer login no devuelve un `resetToken` en lugar del JWT, el DTO de alta lleva persona y `role_ids`, solo hay `ADMIN` y `USER`, y reusar la contraseña actual en la edición no hace nada.
+
+Resultado el 2026-11-05: `node --test test/*.test.cjs` dentro de `pba-ms-auth`, Node 24.13.0, 18 pruebas, 18 aprobadas.
+
+#### 12.9 Trampas
+
+Una sola sesión activa por usuario. Si el teléfono entra con el QR, el portátil recibe 401 «Esta sesión no se encuentra activa» y la web muestra «Tu sesión venció.». `validateUser` devuelve el usuario con el hash y ese objeto viaja por NATS hasta el gateway. En el primer acceso correcto pone `is_first_login: false` y nunca devuelve `requiresPasswordChange`: la rama de «primer ingreso» del gateway no se ejecuta, y es el comportamiento que fija `pba-ms-auth/test/first-login.test.cjs`.
+
+Sin la siembra no hay login: faltan `LOCK_LOGIN_ATTEMPTS`, `LOCK_LOGIN_UNTIL` y `FRONT_END_URL`. `requestNewPassword` no envía correo; devuelve el `resetToken` en la respuesta y el gateway deja esa ruta pública. El token de refresco nunca se emite. `PORT` y `PROJECT_ID` son obligatorias aunque no se usen; el `.env.template` del lanzador no trae `PROJECT_ID`.
+
+No se puede dejar el sistema sin un ADMIN ni darse de baja a sí mismo. Crear un usuario cuyo `username` estaba dado de baja lo reactiva. El `username` es el correo: el DTO exige `@IsEmail` y la persona se crea con `email = username`. Al crear, la contraseña pide al menos ocho caracteres, mayúscula, minúscula, número o carácter especial, sin punto, sin salto de línea y sin espacios; el hash es `bcrypt.hashSync(password, 10)`. Las migraciones crean tablas sin calificar el esquema y funcionan porque la URL lleva `?schema=auth`. El rol activo viaja como UUID en `X-Active-Role`; los nombres `ADMIN` y `USER` los resuelve el gateway al consultar el usuario.
+
+Hay restos de plantilla que no hay que reactivar: enums de nivel educativo y horario preferido, la estrategia Google, e interfaces que importan tipos inexistentes (`policy`, `role_policy`). El enum `Roles` de la primera migración incluía `STUDENT` y `TEACHER`; una migración posterior los pasó a `USER` y los borró. Lo mismo ocurrió con tipos de documento extranjeros: hoy solo quedan `NATIONAL_ID`, `IDENTITY_CARD` y `OTHER`.
 
 ### 13. pba-ms-management
 
-<!-- pendiente: tarea 10 -->
+#### 13.1 Propósito
+
+Management es la puerta única del chat. Tanto `POST /chat/question` del gateway como el micrófono de `pmai-mai-core` terminan en `MANAGEMENT_MS.chatService.chat`. Aquí se decide si la pregunta va por la ruta Básico (OpenAI estructurado y hablar) o por la ruta Complejo (reenviar al turno del núcleo). La elección se guarda en un JSON en disco. Además ofrece `MANAGEMENT_MS.chatService.declarePoema`, un camino viejo que no usa el turno.
+
+No percibe, no elige gestos, no sintetiza voz ni toca el Arduino. Tampoco gestiona las frases de «Decir oración»: esas viven en robótica. Se parece al portero de un auditorio que, según el cartel del día, manda al visitante a la sala pequeña o a la grande; el cartel es `pba-ms-management/data/chat-route.json`. El picker del chat y el micrófono usan esta misma puerta: no hay un camino de voz distinto. En Complejo, la pregunta hace un viaje de ida y vuelta (núcleo → management → núcleo); en Básico, management responde y habla, y el núcleo no participa.
+
+#### 13.2 Versión
+
+Rama `dev`, commit `d70503c`, 2026-10-27, según la tabla [Versión documentada](#versión-documentada). El árbol de trabajo estaba limpio al investigar.
+
+#### 13.3 Tecnología
+
+Node 22, NestJS 11 con transporte NATS, SDK `openai` ^4.104.0, `class-validator` y Joi para el entorno. Prisma 7 está en las dependencias y no se monta: el esquema declara `mysql` sin modelos y el servicio usa el adaptador Postgres, resto de plantilla. Jest 30 con `ts-jest`. El `name` del paquete es `ensename`. Compose arranca `npm run start:debug` (prisma generate y `nest start --debug 0.0.0.0:9232 --watch`) y publica 9232.
+
+#### 13.4 Árbol
+
+```text
+pba-ms-management/src/
+  main.ts                         # microservicio NATS; timeout 20 s; sin HTTP
+  app.module.ts                   # config, OpenAI, chat, robótica
+  app.controller.ts               # salud
+  chat/                           # enrutamiento Básico o Complejo y poema
+  chat/chat-route.store.ts        # lectura y escritura del JSON de ruta
+  openai-integration/             # chatStructured, esquema y prompt constante
+  ms-mai-core-integration/        # MAI_CORE_MS.interactionService.ask
+  ms-robotics-integration/        # ROBOTICS_MS.voiceService.speak
+  ms-auth-integration/            # cliente a auth; no se importa
+  transports/                     # NATS_SERVICE (20 s) y MAI_CORE_NATS (120 s)
+  core/                           # nombres, Joi, Prisma sin usar
+pba-ms-management/data/           # chat-route.json, ignorado por git
+pba-ms-management/test/           # chat-route.spec.ts, la que sí corre
+```
+
+El módulo de chat es el corazón; OpenAI y los dos clientes NATS son colaboradores. Auth está escrito y desconectado a propósito: no se importa en `AppModule` ni en `ChatModule`. La carpeta `data/` sobrevive a recrear el contenedor porque Compose la monta; git la ignora.
+
+#### 13.5 Archivos clave
+
+| Ruta | Propósito |
+|---|---|
+| `pba-ms-management/src/main.ts` | Punto de entrada NATS; `PORT` se valida y no se usa para escuchar |
+| `pba-ms-management/src/chat/chat.controller.ts` | Cinco `@MessagePattern` del chat |
+| `pba-ms-management/src/chat/chat.service.ts` | Decisión `useTurn`, poema y reglas de cambio de ruta |
+| `pba-ms-management/src/chat/chat-route.store.ts` | JSON síncrono de la ruta |
+| `pba-ms-management/src/openai-integration/openai-integration.service.ts` | `chatStructured` con JSON estricto |
+| `pba-ms-management/src/openai-integration/constants/system-prompt.constant.ts` | Prompt que de verdad se envía |
+| `pba-ms-management/src/openai-integration/schema/openai-response.schema.ts` | Esquema `management_chat_reply` |
+| `pba-ms-management/src/transports/nats.module.ts` | Dos clientes, dos tiempos de espera |
+| `pba-ms-management/src/core/settings/app.setting.ts` | Variables Joi |
+| `pba-ms-management/test/chat-route.spec.ts` | Especificación ejecutable de la ruta |
+
+#### 13.6 Contratos
+
+| Expuesto | Entrada | Salida | Archivo |
+|---|---|---|---|
+| `MANAGEMENT_MS.healthService.health` | `{}` | `{ status: 'UP', msName: 'MANAGEMENT_MS' }` | `pba-ms-management/src/app.controller.ts` |
+| `MANAGEMENT_MS.chatService.chat` | `{ message }` no vacío | `{ reply, fuente?, movimientos? }` | `pba-ms-management/src/chat/chat.service.ts` |
+| `MANAGEMENT_MS.chatService.declarePoema` | ignorada | `{ reply }` | `pba-ms-management/src/chat/chat.service.ts` |
+| `MANAGEMENT_MS.chatService.getRoute` | ignorada | `{ automationEnabled, selectedModel }` | `pba-ms-management/src/chat/chat-route.store.ts` |
+| `MANAGEMENT_MS.chatService.setAutomation` | `{ enabled }` | estado; apagar fuerza `basico` | `pba-ms-management/src/chat/chat.service.ts` |
+| `MANAGEMENT_MS.chatService.setModel` | `{ model: 'basico' \| 'complejo' }` | estado o error 409 | `pba-ms-management/src/chat/chat.service.ts` |
+
+La decisión es una sola línea: `const useTurn = route.automationEnabled && route.selectedModel === 'complejo';`. Si es verdadera, management llama a `MAI_CORE_MS.interactionService.ask` y devuelve la respuesta del núcleo tal cual, sin OpenAI y sin hablar: el habla y los gestos los dispara el turno ([6.3](#63-chat-por-la-ruta-complejo-el-turno)). Si es falsa, llama a `chatStructured`, espera `ROBOTICS_MS.voiceService.speak` y responde `{ reply, fuente: 'OpenAI', movimientos: [] }` ([6.2](#62-chat-por-la-ruta-básico)). Pedir `complejo` con los turnos apagados lanza 409 «Los turnos automáticos están apagados». El valor por defecto, si el archivo falta o está corrupto, es turnos encendidos y modelo `complejo`.
+
+`declarePoema` envía a OpenAI el mensaje fijo «Declara un poema para Diana Serrano, con un tono romantico y amoroso», llama a `speak` y devuelve solo `reply`. No consulta la ruta ni el turno ([6.8](#68-declarar-un-poema)). La constante de prompt presenta a R-One «también llamado Federico», tutea, pide una o dos frases, prohíbe saludos de cortesía, emojis y datos institucionales inventados.
+
+`chatStructured` crea un cliente OpenAI en cada llamada, usa `OPENAI_MODEL` y el esquema estricto `management_chat_reply` (un único campo `reply`, `strict: true`, sin propiedades adicionales). No hay historial: cada pregunta va sola con el prompt de sistema. Los errores de contenido vacío, JSON inválido o DTO que no valida salen como 502; un `OpenAI.APIError` conserva su `status` o cae a 502; cualquier otro es 500. Si OpenAI falla no hay respaldo local: el chat Básico muestra un error y no se habla nada.
+
+La variable de entorno `OPENAI_SYSTEM_PROMPT` es obligatoria para Joi y se carga en `configEnvs.openaiSystemPrompt`, pero el servicio no la lee: importa la constante homónima de `pba-ms-management/src/openai-integration/constants/system-prompt.constant.ts`. Cambiar el prompt exige editar ese archivo, no el `.env`. El DTO de respuesta que usa el servicio declara `reply`, `fuente` opcional y `movimientos`; en `pba-ms-management/src/chat/dto/` hay un duplicado más viejo, sin esos dos campos, que nadie importa. `setModel` en management pasa `body.model` sin validar; la validación `@IsIn(['basico', 'complejo'])` la hace el gateway.
+
+| Consumido | Entrada | Salida | Archivo |
+|---|---|---|---|
+| `MAI_CORE_MS.interactionService.ask` | `{ message }` | `{ reply, fuente, movimientos }` | `pba-ms-management/src/ms-mai-core-integration/ms-mai-core.service.ts` (espera 120 s) |
+| `ROBOTICS_MS.voiceService.speak` | `{ message }` | `{ spoken, sink }` al terminar el audio | `pba-ms-management/src/ms-robotics-integration/ms-robotics.service.ts` (espera 20 s) |
+| API Chat Completions | sistema constante más usuario | JSON `{ reply }` | `pba-ms-management/src/openai-integration/openai-integration.service.ts` |
+
+El micrófono entra por el mismo `chat` ([6.4](#64-el-micrófono)): la voz obedece el cartel. En Complejo eso es un viaje de ida y vuelta, núcleo → management → núcleo.
+
+#### 13.7 Configuración
+
+| Clave o variable | Valor | Efecto |
+|---|---|---|
+| `NATS_SERVER` | `nats://nats-server:4222` | Servidor y ambos clientes |
+| `OPENAI_API_KEY` | `MS_MANAGEMENT_OPENAI_API_KEY` | `chatStructured`; sin ella Básico no arranca |
+| `OPENAI_MODEL` | obligatoria; en el `.env` local `gpt-4o-mini` | Modelo de la ruta Básico y del poema |
+| `OPENAI_SYSTEM_PROMPT` | obligatoria y no leída | Joi exige que exista; el texto útil es la constante |
+| `DATABASE_URL` | obligatoria | Prisma no se monta; sin ella el servicio no arranca |
+| `PORT` | 3002 | No hay HTTP |
+| `MS_MANAGEMENT_CHAT_ROUTE_PATH` | no se pasa al contenedor | Cae a `/usr/src/app/data/chat-route.json` |
+| `automationEnabled` / `selectedModel` | `true` / `complejo` por defecto | Archivo montado; git lo ignora |
+
+El archivo de ruta es `{ "automationEnabled": true, "selectedModel": "complejo" }` cuando existe. Cada llamada a `chat`, `getRoute`, `setAutomation` y `setModel` lo relee de forma síncrona y normaliza: cualquier `selectedModel` distinto de `basico` se lee como `complejo`, y solo `automationEnabled === false` apaga los turnos. La escritura no es atómica: crea la carpeta y escribe JSON con sangría de 2. El detalle está en [7.4](#74-ruta-del-chat). El catálogo de variables está en el [Anexo B](#anexo-b-variables-de-entorno). Qué modelo queda en cada máquina de campo depende de que `.env` rellene `MS_MANAGEMENT_OPENAI_MODEL`: la plantilla del lanzador la deja vacía y Joi no admite vacío, de modo que con la plantilla sola management no arranca.
+
+Los dos clientes NATS comparten servidor y opciones salvo el tiempo de espera: `NATS_SERVICE` 20 000 ms (voz) y `MAI_CORE_NATS` 120 000 ms (turno). El módulo de auth hacia `AUTH_MS.appSettingsService.findOne`, `AUTH_MS.usersService.findOne` y `AUTH_MS.countryService.findActive` existe en `pba-ms-management/src/ms-auth-integration/` y no se importa: esos tres patrones no se usan en caliente. Prisma declara `provider = "mysql"` sin modelos, mientras `PrismaService` usa el adaptador Postgres; como `PrismaModule` no entra en `AppModule`, management no abre conexión.
+
+#### 13.8 Pruebas
+
+`npm test` ejecuta Jest con `rootDir: "test"`, así que solo corre `pba-ms-management/test/chat-route.spec.ts`. Esa suite cubre el almacén (valores por defecto, archivo corrupto, persistencia) y la ruta: OpenAI más `speak` con turnos apagados, OpenAI con turnos encendidos y modelo básico, mai-core sin hablar con modelo complejo, apagar los turnos fuerza básico, y pedir complejo con turnos apagados da 409. `pba-ms-management/src/chat/chat.service.spec.ts` está obsoleta (construye el servicio sin el almacén) y no se ejecuta.
+
+Resultado de la investigación: `npx jest --ci` → 1 suite, 8 pruebas, 8 aprobadas.
+
+#### 13.9 Trampas
+
+La ruta se relee del disco en cada mensaje: editar `pba-ms-management/data/chat-route.json` a mano cambia el comportamiento sin reiniciar. Un archivo corrupto vuelve al turno. `setModel` en management no valida el valor; un modelo desconocido publicado directo por NATS se escribe y luego se lee como `complejo`. En Complejo management no habla; añadir un `speak` aquí haría hablar a R-ONE dos veces.
+
+Los tiempos de espera se encadenan: el micrófono espera 30 s a management, management espera 120 s al núcleo y el gateway espera 20 s. Un turno lento puede vencer al micrófono o a la web aunque management siga esperando. En Básico, `speak` se espera con el cliente de 20 s: un audio largo (el poema, por ejemplo) puede vencer esa espera aunque robótica siga reproduciendo. Sin OpenAI, Básico y el poema fallan y no se habla nada.
+
+Hoy ningún botón de la web llama a `POST /chat/poema`; la ruta queda para una herramienta HTTP o para otra interfaz. La regla de agentes `.cursor/rules/chat-surface.mdc` pide no llamar a `speak` ni a OpenAI en `chat()`. El código de la ruta Básico hace las dos cosas. La regla quedó atrás del cambio de ruta; manda `AGENTS.md` y esta ficha.
 
 ### 14. pba-ms-robotics
 
-<!-- pendiente: tarea 10 -->
+#### 14.1 Propósito
+
+Robótica es el cuerpo de R-ONE: sintetiza y reproduce la voz, guarda el catálogo canónico de secuencias, las reproduce por puerto serie hacia uno o más Arduino con placas PCA9685 y administra las frases de «Decir oración». Expone todo por NATS con el sobre de NestJS. FastAPI solo existe para el ciclo de vida (conectar NATS al arrancar) y no publica rutas de negocio. Uvicorn escucha en 3003 porque Compose se lo pide, no porque haya API HTTP propia.
+
+No decide qué decir ni qué gesto hacer: eso lo deciden management (ruta Básico) y el núcleo (turno). Robótica es el escenario y el técnico de sonido: le llegan el texto y los ids, y se ocupa de que se oigan y se vean. El ciclo de un gesto está en [6.5](#65-ciclo-de-un-gesto); el formato JSON, en [7.3](#73-secuencias-en-json).
+
+#### 14.2 Versión
+
+Rama `dev`, commit `05a6e16`, 2026-10-27, según la tabla [Versión documentada](#versión-documentada). El árbol de trabajo estaba limpio al investigar.
+
+#### 14.3 Tecnología
+
+Python ≥ 3.13, imagen `python:3.13-slim`. Dependencias: `openai`, `nats-py`, `pydantic`, FastAPI, Uvicorn, `pyserial`, `python-dotenv`. En la imagen hay `pulseaudio-utils`, `alsa-utils`, `espeak-ng` y el binario Piper `2023.11.14-2` para `linux_x86_64`. El modelo Piper `es_ES-davefx-medium.onnx` va versionado en el repositorio. Pyright en modo `strict`; pytest con `asyncio_mode = auto`. Compose monta el repositorio entero, el socket de PulseAudio y la cookie, y corre con `privileged: true` para ver `/dev/ttyACM*` y `/dev/ttyUSB*`.
+
+#### 14.4 Árbol
+
+```text
+pba-ms-robotics/src/
+  app.py                          # FastAPI; lifespan conecta NATS y suscribe
+  app_controller.py               # salud
+  core/nats/                      # cliente, sobre Nest, lista de sujetos
+  core/settings/env.py            # ROBOTICS_MS y rutas de datos
+  core/models/voice/              # Piper onnx
+  action/                         # getActions y executeAction
+  action/utils/arduino_utils.py   # puertos serie compartidos
+  sequence/                       # almacén JSON, ingesta, cola, runtime
+  sequence/playback_queue.py      # normal → 1 s → neutro → 1 s
+  sequence/ingest.py              # par completo y descripción ≥ 10
+  voice/                          # TTS, Pulse, reproducción
+  voice/phrases/                  # Decir oración
+pba-ms-robotics/data/sequences/   # 31 JSON canónicos
+pba-ms-robotics/tests/            # cinco archivos pytest
+```
+
+La separación es por oficio, no por protocolo. `action/` es lo que el turno ve (catálogo e ids). `sequence/` es lo que el estudio y el panel ven (archivos, reproducción, cadenas, snapshot). `voice/` es el parlante. Las tres se encuentran en `pba-ms-robotics/src/core/nats/nats_subscribers.py`, que es la tabla de sujetos. El problema de esa separación, como se verá en [14.9](#149-trampas), es que `action/` y `sequence/` no comparten la misma instancia de `SequenceService`.
+
+#### 14.5 Archivos clave
+
+| Ruta | Propósito |
+|---|---|
+| `pba-ms-robotics/src/app.py` | Punto de entrada; `nats_handler.connect()` y CORS abierto |
+| `pba-ms-robotics/src/core/nats/nats_subscribers.py` | Sujeto → controlador; crea las dos instancias |
+| `pba-ms-robotics/src/core/nats/nats_client.py` | Sobre Nest `{ response, isDisposed }` y errores |
+| `pba-ms-robotics/src/action/action_service.py` | `get_actions` y `execute_action` |
+| `pba-ms-robotics/src/sequence/sequence_service.py` | Almacén, ingesta, `enqueue_turn_pair`, serie |
+| `pba-ms-robotics/src/sequence/playback_queue.py` | Cola y snapshot de runtime |
+| `pba-ms-robotics/src/sequence/ingest.py` | `is_complete_pair` y normalización del estudio |
+| `pba-ms-robotics/src/action/utils/arduino_utils.py` | Descubrimiento de `/dev/ttyACM*` y `/dev/ttyUSB*` |
+| `pba-ms-robotics/src/voice/voice_service.py` | `speak_only`: OpenAI o Piper o eSpeak, y `paplay` |
+| `pba-ms-robotics/src/core/nats/nest_request.py` | Helper para llamar a Nest; hoy nadie lo usa en caliente |
+
+#### 14.6 Contratos
+
+Veinte sujetos `ROBOTICS_MS.*`. La lista global está en el [Anexo C](#anexo-c-patrones-nats); las rutas HTTP equivalentes, en el [Anexo D](#anexo-d-endpoints-http-del-gateway). Nest envía `{ id, pattern, data }`; robótica responde `{ response, isDisposed: true }`. Un `ValueError` (Arduino ausente, secuencia inexistente) sale como texto y el gateway lo convierte en 400.
+
+| Expuesto | Entrada | Salida | Archivo |
+|---|---|---|---|
+| `ROBOTICS_MS.actionService.getActions` | ignorada | `{ total, data: [{ id, name, arduino_id, description }] }` | `pba-ms-robotics/src/action/action_service.py` |
+| `ROBOTICS_MS.actionService.executeAction` | `{ action_id, arduino_id }` | `{ status, response: ['Encolado'] }` o `['omitido']` | `pba-ms-robotics/src/action/action_service.py` |
+| `ROBOTICS_MS.voiceService.speak` | `{ message }` ≥ 1 carácter | `{ message, spoken: true, sink }` al terminar el audio | `pba-ms-robotics/src/voice/voice_service.py` |
+| `ROBOTICS_MS.sequenceService.startPlayback` | `{ mode, source: 'panel'\|'estudio', name? }` | iniciada o «Ya existe una secuencia en ejecución» | `pba-ms-robotics/src/sequence/sequence_service.py` |
+| `ROBOTICS_MS.sequenceService.stopPlayback` | `{}` | detenida o no había | `pba-ms-robotics/src/sequence/sequence_service.py` |
+| `ROBOTICS_MS.sequenceService.getRuntime` | ignorada | `{ busy, source, current, queue }` | `pba-ms-robotics/src/sequence/playback_queue.py` |
+| `ROBOTICS_MS.sequenceService.saveSequence` | `{ sequence, overwrite? }` | guardada con `id` | `pba-ms-robotics/src/sequence/ingest.py` |
+| `ROBOTICS_MS.phraseService.list` / `create` / `update` / `setActive` | frase | catálogo en `phrases.json` | `pba-ms-robotics/src/voice/phrases/` |
+
+`getActions` no mira el Arduino. Recorre el almacén y se queda solo con los pares completos: categoría de las seis (`cara`, `cuello`, `brazo_derecho`, `brazo_izquierdo`, `torso`, `cadera`), `blocks` y `blocks_neutro` no vacíos, `id` presente y descripción de al menos diez caracteres tras `strip()`. Hoy las 31 secuencias de `pba-ms-robotics/data/sequences/Secuencias` tienen `id`, categoría y neutro, pero `"description": ""`. Ejecutar `as_commands()` sobre ese almacén da catálogo 0: el turno habla y no mueve. Un almacén vacío o solo JSON legado tampoco es un fallo del turno.
+
+`executeAction` busca por `id`. Si el par es incompleto, responde `omitido`. Si es completo, llama a `enqueue_turn_pair` y responde en cuanto encola. Si el id no existe, escribe `"<action_id>\n"` en el puerto del `arduino_id` pedido (ruta heredada). El `arduino_id` que manda el núcleo se ignora cuando el id está en el almacén: cada bloque lleva el suyo.
+
+La cola de reproducción del turno es siempre la misma, y no la inserta el núcleo:
+
+```mermaid
+flowchart TD
+  Recibe["executeAction recibe un id"] --> Par{"Es un par completo"}
+  Par -->|"no"| Omite["Responde omitido"]
+  Par -->|"sí"| Encola["Encola normal, espera 1 s, neutro, espera 1 s"]
+  Encola --> Responde["Responde Encolado"]
+  Encola --> Hilo["Hilo sequence-queue"]
+  Hilo --> Normal["Paso normal: envía cada bloque PCA"]
+  Normal --> Espera1["Espera 1 s"]
+  Espera1 --> Neutro["Paso neutro: vuelve al descanso"]
+  Neutro --> Espera2["Espera 1 s"]
+  Espera2 --> Mas{"Quedan gestos en cola"}
+  Mas -->|"sí"| Normal
+  Mas -->|"no"| Vacia["Cola vacía"]
+```
+
+`WAIT_SECONDS` vale 1,0. El hilo es `daemon`. Un segundo gesto del turno se agrega detrás (`reject_if_busy=False`). El panel y el estudio, en cambio, llaman a `startPlayback` con `reject_if_busy=True`: si la cola está ocupada se rechazan. Cada bloque sale como `PCA,<pca>,<servo>,<pos>,<vel>\n` a 115200 baudios cuando el reloj alcanza su `inicio`. `dur` no viaja al Arduino. Sin Arduino, la cola descarta el paso de movimiento y consume las esperas. Detener vacía la cola y no envía nada al firmware: los servos se quedan en la última posición.
+
+La voz recorta Markdown (código, encabezados, viñetas), intenta OpenAI TTS si `VOICE_TTS_MODE` no es `local` y hay `OPENAI_API_KEY` (`gpt-4o-mini-tts`, voz `ash`, WAV, texto recortado a 4096 caracteres, espera 60 s), y si falla cae a Piper (`piper --model … --output_file`) y luego a eSpeak (`-v ${ESPEAK_VOICE:-es}`). Reproduce con `paplay` hacia el primer sink `bluez`, USB o el primero de la lista; si `paplay` falla prueba `pw-play` y `aplay`. `VOICE_SKIP_PLAYBACK` genera el WAV y no lo oye. `speak` responde cuando terminó de sonar: el núcleo espera 30 s y management 20 s. El WAV temporal se borra siempre.
+
+Hacia el Arduino, `sync_connections` abre los `/dev/ttyACM*` y `/dev/ttyUSB*` a 115200 baudios, espera 1,8 s (el micro se reinicia al abrir el puerto) y asigna `arduino_id` en orden alfabético, el primero es 0. Cada bloque se escribe bajo un `lock` como `PCA,<pca>,<servo>,<pos>,<vel>\n` y se hace `flush`; no se espera respuesta. El primer bloque de `NEGAR 9.0` sale `PCA,0,1,420,6`. El escaneo escribe `SCAN\n` y espera una línea `PCAS:<csv>`. Robótica valida `pca` 0–10, `servo` 0–15, `pos` 0–1000 y `vel` 1–10; el firmware vigente solo acepta `pca` 0–3. No hay variable de entorno para fijar el puerto.
+
+Robótica no consume sujetos NATS en caliente. Quien la llama: el núcleo (`speak`, `getActions`, `executeAction`), management (`speak`) y el gateway (el resto, incluido el estudio).
+
+#### 14.7 Configuración
+
+| Clave o variable | Valor | Efecto |
+|---|---|---|
+| `NATS_SERVER` | obligatoria para validar | El destino real está escrito: `nats://nats-server:4222` |
+| `SEQUENCES_DATA_DIR` | `/usr/src/app/data/sequences` | Almacén canónico |
+| `PHRASES_PATH` | `/usr/src/app/data/phrases.json` | Frases de «Decir oración» |
+| `ACTION_DESCRIPTIONS_PATH` | JSON heredado | Nadie en `src` lo lee; las frases salen del campo `description` |
+| `VOICE_TTS_MODE` | `auto` | `local` nunca usa la nube; el resto intenta OpenAI si hay clave |
+| `OPENAI_API_KEY` | `MS_ROBOTICS_OPENAI_API_KEY` | Compose no reusa la de management |
+| `PIPER_MODEL_PATH` | onnx del repo | TTS local |
+| `ESPEAK_VOICE` | `es` | Respaldo de Piper |
+| `VOICE_SKIP_PLAYBACK` | `0` | `1` / `true` / `yes` no reproduce |
+| `PULSE_SERVER` | socket del UID 1000 | `paplay` / `pactl` |
+| `PORT` | 3003 | Uvicorn; sin rutas de negocio |
+
+El catálogo está en el [Anexo B](#anexo-b-variables-de-entorno). Si `MS_ROBOTICS_OPENAI_API_KEY` va vacía, el TTS es local aunque management tenga clave.
+
+#### 14.8 Pruebas
+
+Comando: `pytest`, con `testpaths = ["tests"]`. En la investigación: `NATS_SERVER=nats://x:4222 .venv/bin/python -m pytest -q -p no:cacheprovider` → 43 aprobadas en 0,99 s.
+
+`test_playback_queue.py` cubre la espera de 1 s, que `executeAction` encola los cuatro pasos y regresa antes de terminar, que un segundo gesto se agrega, que el panel no interrumpe una cola ocupada, que Detener vacía, que el hardware ausente descarta el paso y que el snapshot trae `remaining_ms` y `fired`. `test_sequence_ingest.py` cubre origen → canónico, descripción de 10 aceptada y más corta rechazada en el catálogo, neutro obligatorio, `overwrite` que conserva el `id` y JSON legado que se lista pero no entra a `getActions`. `test_action_catalog.py` fija que el catálogo sale de las secuencias y no del firmware. `test_phrase_store.py` cubre la siembra de frases. Las pruebas de la cola usan un único `SequenceService` compartido; en producción no es así.
+
+#### 14.9 Trampas
+
+Hay dos instancias de `SequenceService` y por tanto dos colas. `create_subscribers` construye un `ActionController()` (que crea su `ActionService`, que crea su `SequenceService`) y un `SequenceController()` (que crea otro). Los gestos del turno (`executeAction`) van a la primera cola; `getRuntime`, `stopPlayback` y `startPlayback` operan sobre la segunda. De ahí que el cajón de runtime de la web y el botón Detener no vean los gestos del turno, y de que el panel pueda reproducir a la vez que un gesto del turno. Las pruebas no lo detectan porque inyectan una sola instancia. Que eso se note en el hardware queda pendiente de confirmar: se deduce del código (`pba-ms-robotics/src/core/nats/nats_subscribers.py`) y no hay prueba de integración que lo cubra.
+
+El catálogo está vacío si la descripción tiene menos de diez caracteres, aunque el par sea perfecto y el Arduino esté enchufado. La ingesta acepta descripción vacía, de modo que se puede guardar una secuencia que nunca aparecerá en el turno. De dónde salieron las 31 secuencias actuales sin descripción queda pendiente de confirmar: el estudio exige diez caracteres al guardar, así que probablemente se migraron por otra vía. Mientras no se describan, el turno no mueve el cuerpo; lanzarlos a mano desde el panel sí funciona, porque el panel no filtra por descripción.
+
+El binario Piper de la imagen es `linux_x86_64`. En la Jetson (`aarch64`) `shutil.which("piper")` lo encuentra, y un error de ejecución no cae a eSpeak. Si esa imagen se construyó así en campo, y cómo se comporta, queda pendiente de confirmar. Abrir un puerto serie reinicia el Arduino y bloquea 1,8 s; el estudio consulta `/sequence/arduinos` cada 5 s. Los `arduino_id` dependen del orden alfabético de los dispositivos: reconectar un USB puede cambiar qué placa es la 0. Un JSON inválido en la carpeta rompe a la vez `listSequences`, `getActions` y `executeAction`. `executeAction` y `as_commands` releen todos los JSON en cada llamada. No se cambia `WAIT_SECONDS` ni el orden de los cuatro pasos: las pruebas y `AGENTS.md` los fijan.
+
+Las frases de «Decir oración» viven en `PHRASES_PATH`. Si el archivo falta o `items` está vacío, se siembran 25 frases (saludos al Colegio Militar Patria, carreras, presentaciones). Si está corrupto, lanza error 500 y no lo sobrescribe. Pronunciar una frase no tiene sujeto propio: la interfaz usa `POST /voice/speak`. `ACTION_DESCRIPTIONS_PATH` y `pba-ms-robotics/src/action/descriptions.py` existen y nadie en `src` los importa: las descripciones del turno salen del campo `description` del JSON canónico.
 
 ### 15. pmai-mai-core
 
