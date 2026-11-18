@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Póster R-ONE sobre la plantilla Unilibre / Prometeo."""
+"""Póster R-ONE: pliego Unilibre, paleta suave, Nunito, se lee solo."""
 
 from __future__ import annotations
 
@@ -9,57 +9,99 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from pptx import Presentation
 from pptx.dml.color import RGBColor
-from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE, MSO_SHAPE_TYPE
+from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.oxml.ns import qn
 from pptx.util import Pt
 
 ROOT = Path("/home/personal/Projects/ulibre-prometeo/pba-launcher")
 ASSETS = ROOT / "docs/poster/assets"
+FONTS = ROOT / "docs/poster/fonts"
+WEB = ROOT / "pmas-web-main/public/assets/assets"
 TEMPLATE = ROOT / "docs/poster/plantilla-poster.pptx"
 OUTPUT = ROOT / "docs/poster/poster-r-one.pptx"
 PREVIEW = ASSETS / "preview-poster.png"
 
-NAVY = RGBColor(0x0B, 0x25, 0x40)
-CYAN = RGBColor(0x38, 0xBD, 0xF8)
-CYAN_INK = RGBColor(0x0C, 0x4A, 0x6E)
-EMERALD = RGBColor(0x05, 0x96, 0x69)
+# Paleta suave: pizarra, teal y sage, papel cálido. El rojo Unilibre
+# queda en el título de la plantilla, la línea del pie y el número de sección.
+SLATE = RGBColor(0x4A, 0x65, 0x76)
+TEAL = RGBColor(0x7E, 0xB6, 0xC4)
+TEAL_DEEP = RGBColor(0x3E, 0x72, 0x82)
+SAGE = RGBColor(0x7D, 0xAA, 0x96)
+SAGE_DEEP = RGBColor(0x4A, 0x7A, 0x68)
 RED = RGBColor(0xBE, 0x18, 0x18)
-PAPER = RGBColor(0xEE, 0xF2, 0xF6)
-CARD = RGBColor(0xF7, 0xFA, 0xFC)
-INK = RGBColor(0x0B, 0x25, 0x40)
-MUTED = RGBColor(0x3D, 0x5A, 0x73)
-BORDER = RGBColor(0xC5, 0xD4, 0xE0)
+PAPER = RGBColor(0xF4, 0xF1, 0xEB)
+CARD = RGBColor(0xFC, 0xFA, 0xF6)
+INK = RGBColor(0x2F, 0x3E, 0x4C)
+MUTED = RGBColor(0x5C, 0x6E, 0x7A)
+BORDER = RGBColor(0xD5, 0xDC, 0xE0)
 WHITE = RGBColor(0xFF, 0xFF, 0xFF)
-AIR = RGBColor(0xE8, 0xEE, 0xF4)
+AIR = RGBColor(0xEE, 0xF3, 0xF5)
+MIST = RGBColor(0xE4, 0xED, 0xF0)
+CHIP = RGBColor(0xC3, 0xDE, 0xE6)
+CHIP_SAGE = RGBColor(0xC6, 0xE0, 0xD2)
+HERO_BG = RGBColor(0xE6, 0xEE, 0xF1)
 
 HEX = {
-    "navy": "#0B2540",
-    "paper": "#EEF2F6",
-    "card": "#F7FAFC",
-    "cyan": "#38BDF8",
-    "emerald": "#059669",
+    "navy": "#4A6576",
+    "paper": "#F4F1EB",
+    "card": "#FCFAF6",
+    "cyan": "#7EB6C4",
+    "emerald": "#7DAA96",
     "red": "#BE1818",
-    "ink": "#0B2540",
-    "muted": "#3D5A73",
-    "air": "#E8EEF4",
-    "border": "#C5D4E0",
+    "ink": "#2F3E4C",
+    "muted": "#5C6E7A",
+    "air": "#EEF3F5",
+    "border": "#D5DCE0",
+    "mist": "#E4EDF0",
 }
 
-FONT_REG = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-FONT_IT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf"
-SCALE = {"Calibri": 1.0, "Arial": 1.0, "Montserrat Bold": 1.0}
+FONT_REG = str(FONTS / "Nunito-Regular.ttf")
+FONT_BOLD = str(FONTS / "Nunito-Bold.ttf")
+FONT_SEMI = str(FONTS / "Nunito-SemiBold.ttf")
+FONT_IT = str(FONTS / "Nunito-Italic.ttf")
+FONT_MONTS = str(FONTS / "Montserrat-Bold.ttf")
+SCALE = {"Calibri": 1.0, "Arial": 1.0, "Montserrat Bold": 1.0, "Nunito": 1.0}
+KEEP = {
+    "Imagen 75",
+    "Imagen 4",
+    "TextBox 70",
+    "TextBox 73",
+    "TextBox 74",
+    "AutoShape 71",
+}
 
-KEEP = {"Imagen 75", "Imagen 4", "TextBox 70", "TextBox 73", "TextBox 74", "AutoShape 71"}
+TITLE = "Nunito"
+BODYF = "Nunito"
+HEAD_F = "Montserrat Bold"
+HEAD_H = 1.05
+BODY = 26
+SUB = 23
+CAP = 18
+H1 = 34
+
+HERO_SRC = WEB / "IMG-20251031-WA0005.jpg"
+EVENT_A = ASSETS / "IMG-20260423-WA0007 (1).jpg"
+EVENT_B = ASSETS / "IMG-20260423-WA0022.jpg"
+EVENT_C = ASSETS / "IMG-20260424-WA0035.jpg"
 
 
 def emu(inches: float) -> int:
     return int(round(inches * 914400))
 
 
-def T(t, sz=16, b=False, c=INK, f="Arial", a=PP_ALIGN.LEFT, sa=0, ls=1.12, i=False):
-    return {"t": t, "sz": sz, "b": b, "c": c, "f": f, "a": a, "sa": sa, "ls": ls, "i": i}
+def T(t, sz=BODY, b=False, c=INK, f=BODYF, a=PP_ALIGN.LEFT, sa=0, ls=1.22, i=False):
+    return {
+        "t": t,
+        "sz": sz,
+        "b": b,
+        "c": c,
+        "f": f,
+        "a": a,
+        "sa": sa,
+        "ls": ls,
+        "i": i,
+    }
 
 
 def set_font(run, name: str) -> None:
@@ -108,7 +150,7 @@ def shape(slide, kind, x, y, w, h, fill, line=None, adj=None):
         sh.line.fill.background()
     else:
         sh.line.color.rgb = line
-        sh.line.width = Pt(1.25)
+        sh.line.width = Pt(1.5)
     sh.shadow.inherit = False
     return sh
 
@@ -117,9 +159,24 @@ def rect(slide, x, y, w, h, fill, line=None, adj=0.04):
     return shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, x, y, w, h, fill, line, adj)
 
 
-def box(slide, x, y, w, h, fill, items, anchor=MSO_ANCHOR.MIDDLE, line=None, adj=0.08, pad=(0.1, 0.1, 0.06, 0.06), kind=MSO_SHAPE.ROUNDED_RECTANGLE):
+def box(
+    slide,
+    x,
+    y,
+    w,
+    h,
+    fill,
+    items,
+    anchor=MSO_ANCHOR.MIDDLE,
+    line=None,
+    adj=0.08,
+    pad=(0.14, 0.14, 0.1, 0.1),
+    kind=MSO_SHAPE.ROUNDED_RECTANGLE,
+):
     sh = shape(slide, kind, x, y, w, h, fill, line, adj)
-    write_tf(sh.text_frame, items, anchor=anchor, ml=pad[0], mr=pad[1], mt=pad[2], mb=pad[3])
+    write_tf(
+        sh.text_frame, items, anchor=anchor, ml=pad[0], mr=pad[1], mt=pad[2], mb=pad[3]
+    )
     return sh
 
 
@@ -129,17 +186,27 @@ def text(slide, x, y, w, h, items, anchor=MSO_ANCHOR.TOP):
     return tb
 
 
-def _font(sz_px, bold, italic):
-    pathf = FONT_BOLD if bold else (FONT_IT if italic else FONT_REG)
+def _font(sz_px, bold, italic, family=""):
+    fam = family or ""
+    if "Montserrat" in fam:
+        pathf = FONT_MONTS
+    elif italic:
+        pathf = FONT_IT
+    elif bold:
+        pathf = FONT_BOLD
+    else:
+        pathf = FONT_REG
     return ImageFont.truetype(pathf, max(6, int(sz_px)))
 
 
 def measure(items, w_in, dpi=100) -> float:
     d = ImageDraw.Draw(Image.new("RGB", (8, 8)))
-    width_px = w_in * dpi
+    width_px = max(8, w_in * dpi)
     total = 0.0
     for it in items:
-        f = _font(it["sz"] * dpi / 72 * SCALE.get(it["f"], 0.9), it["b"], it["i"])
+        f = _font(
+            it["sz"] * dpi / 72 * SCALE.get(it["f"], 1.0), it["b"], it["i"], it["f"]
+        )
         lh = it["sz"] * dpi / 72 * 1.2 * it["ls"]
         n = 0
         for hard in it["t"].split("\n"):
@@ -153,7 +220,7 @@ def measure(items, w_in, dpi=100) -> float:
                     n += 1
                     cur = wd
         total += n * lh + it["sa"] * dpi / 72
-    return total / dpi * 1.16 + 0.06
+    return total / dpi * 1.1 + 0.05
 
 
 def flow_text(slide, x, y, w, items) -> float:
@@ -162,36 +229,116 @@ def flow_text(slide, x, y, w, items) -> float:
     return y + h
 
 
-HEAD_H = 0.78
-
-
 class Card:
     def __init__(self, slide, x, y, w, num, title):
-        self.slide = slide
-        self.x, self.y, self.w = x, y, w
-        self.bg = rect(slide, x, y, w, 1.2, CARD, line=BORDER, adj=0.03)
-        rect(slide, x, y, w, HEAD_H, NAVY, adj=0.08)
+        self.x, self.y, self.w, self.slide = x, y, w, slide
+        self.bg = rect(slide, x, y, w, 1.5, CARD, line=BORDER, adj=0.025)
         box(
-            slide, x + 0.12, y + 0.12, 0.54, 0.54, RED,
-            [T(num, 14, True, WHITE, "Arial", PP_ALIGN.CENTER, ls=1.0)],
-            kind=MSO_SHAPE.OVAL, pad=(0, 0, 0, 0),
+            slide,
+            x + 0.22,
+            y + 0.18,
+            0.72,
+            0.72,
+            RED,
+            [T(num, 18, True, WHITE, TITLE, PP_ALIGN.CENTER, ls=1.0)],
+            kind=MSO_SHAPE.OVAL,
+            pad=(0, 0, 0, 0),
         )
         text(
-            slide, x + 0.78, y, w - 0.95, HEAD_H,
-            [T(title, 22, True, WHITE, "Arial", ls=1.0)],
+            slide,
+            x + 1.08,
+            y,
+            w - 1.28,
+            HEAD_H,
+            [T(title, H1, True, SLATE, TITLE, ls=1.0)],
             anchor=MSO_ANCHOR.MIDDLE,
         )
-        self.body = y + HEAD_H + 0.16
+        shape(
+            slide,
+            MSO_SHAPE.RECTANGLE,
+            x + 0.22,
+            y + HEAD_H - 0.04,
+            w - 0.44,
+            0.055,
+            TEAL,
+        )
+        self.body = y + HEAD_H + 0.22
 
     def close(self, bottom: float) -> float:
-        self.bg.height = emu(bottom - self.y)
+        self.bg.height = emu(max(0.4, bottom - self.y))
         return bottom
 
 
-def picture(slide, path, x, y, w) -> float:
+def round_rgba(im: Image.Image, radius_frac=0.045) -> Image.Image:
+    im = im.convert("RGBA")
+    w, h = im.size
+    r = max(8, int(min(w, h) * radius_frac))
+    mask = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, w - 1, h - 1), r, fill=255)
+    im.putalpha(mask)
+    return im
+
+
+def cover_crop(im: Image.Image, aspect: float, focus: str) -> Image.Image:
+    src = im.width / im.height
+    if src < aspect:
+        new_h = max(1, int(im.width / aspect))
+        extra = im.height - new_h
+        if focus == "top":
+            top = 0
+        elif focus == "bottom":
+            top = extra
+        elif focus == "people":
+            top = int(extra * 0.38)
+        else:
+            top = extra // 4
+        return im.crop((0, top, im.width, top + new_h))
+    new_w = max(1, int(im.height * aspect))
+    extra = im.width - new_w
+    left = extra // 2 if focus != "left" else extra // 5
+    return im.crop((left, 0, left + new_w, im.height))
+
+
+def picture(slide, src: Path, x, y, w, h, focus="center", round_it=True) -> None:
+    with Image.open(src) as im:
+        im = cover_crop(im.convert("RGB"), w / h, focus)
+        im = im.resize(
+            (max(8, int(w * 140)), max(8, int(h * 140))), Image.Resampling.LANCZOS
+        )
+        if round_it:
+            im = round_rgba(im)
+            tmp = ASSETS / "_fit.png"
+            im.save(tmp, "PNG")
+        else:
+            tmp = ASSETS / "_fit.jpg"
+            im.save(tmp, "JPEG", quality=90)
+    slide.shapes.add_picture(str(tmp), emu(x), emu(y), width=emu(w), height=emu(h))
+
+
+def im_aspect(path: Path) -> float:
     with Image.open(path) as im:
+        return im.height / im.width
+
+
+def picture_contain(slide, src: Path, x, y, w, max_h) -> float:
+    with Image.open(src) as im:
+        im = im.convert("RGB")
         h = w * im.height / im.width
-    slide.shapes.add_picture(str(path), emu(x), emu(y), width=emu(w), height=emu(h))
+        use_w = w
+        if h > max_h:
+            h = max_h
+            use_w = h * im.width / im.height
+            x = x + (w - use_w) / 2
+        im = round_rgba(
+            im.resize(
+                (max(8, int(use_w * 140)), max(8, int(h * 140))),
+                Image.Resampling.LANCZOS,
+            ),
+            0.03,
+        )
+        tmp = ASSETS / "_fit.png"
+        im.save(tmp, "PNG")
+    slide.shapes.add_picture(str(tmp), emu(x), emu(y), width=emu(use_w), height=emu(h))
     return h
 
 
@@ -205,7 +352,17 @@ def fix_header(slide) -> None:
     sem = next(s for s in slide.shapes if s.name == "TextBox 73")
     write_tf(
         sem.text_frame,
-        [T("Semillero de Investigación PROMETEO", 28, True, INK, "Arial", PP_ALIGN.CENTER, ls=1.0)],
+        [
+            T(
+                "Semillero de Investigación PROMETEO",
+                40,
+                True,
+                INK,
+                HEAD_F,
+                PP_ALIGN.CENTER,
+                ls=1.0,
+            )
+        ],
         anchor=MSO_ANCHOR.MIDDLE,
     )
 
@@ -217,12 +374,41 @@ def send_to_back(slide, sh) -> None:
     tree.insert(2, el)
 
 
-def chip(slide, x, y, w, h, value, label, fill):
+def chevrons(slide, x, y, w, h, steps):
+    n = len(steps)
+    k = h * 0.34
+    sw = (w + (n - 1) * k * 0.55) / n
+    for i, (label, sub, fill, ink) in enumerate(steps):
+        kind = MSO_SHAPE.PENTAGON if i == 0 else MSO_SHAPE.CHEVRON
+        sx = x + i * (sw - k * 0.55)
+        box(
+            slide,
+            sx,
+            y,
+            sw,
+            h,
+            fill,
+            [
+                T(label, 22, True, ink, TITLE, PP_ALIGN.CENTER, sa=3, ls=1.0),
+                T(sub, 16, False, ink, TITLE, PP_ALIGN.CENTER, ls=1.0),
+            ],
+            kind=kind,
+            adj=None,
+            pad=(k * 0.9 if i else 0.12, k * 0.55, 0.08, 0.08),
+        )
+
+
+def soft_chip(slide, x, y, w, h, value, label, fill=CHIP, ink=TEAL_DEEP):
     box(
-        slide, x, y, w, h, fill,
+        slide,
+        x,
+        y,
+        w,
+        h,
+        fill,
         [
-            T(value, 26, True, WHITE, "Arial", PP_ALIGN.CENTER, sa=1, ls=1.0),
-            T(label, 13, False, WHITE, "Arial", PP_ALIGN.CENTER, ls=1.0),
+            T(value, 32, True, ink, TITLE, PP_ALIGN.CENTER, sa=4, ls=1.0),
+            T(label, 16, False, MUTED, TITLE, PP_ALIGN.CENTER, ls=1.05),
         ],
         adj=0.14,
     )
@@ -235,249 +421,472 @@ def main() -> None:
     delete_content(slide)
     fix_header(slide)
 
-    bg = rect(slide, 0, 6.05, 35.43, 40.85, PAPER, adj=0.0)
+    bg = rect(slide, 0, 6.02, 35.43, 40.92, PAPER, adj=0.0)
     send_to_back(slide, bg)
 
-    # ── banda héroe ───────────────────────────────────────
-    hero_y, hero_h = 6.22, 4.55
-    rect(slide, 0.32, hero_y, 34.79, hero_h, NAVY, adj=0.02)
-    photo_w = 3.05
-    ph = picture(slide, ASSETS / "foto-hero.jpg", 0.48, hero_y + 0.18, photo_w)
-    # recorte visual: si la foto es más alta que la banda, el picture ya usa el alto natural.
-    # Limitar alto recolocando si se pasa.
-    if ph > hero_h - 0.36:
-        # reemplazar no es fácil; la foto se dibuja con altura natural. Recortamos el archivo antes.
-        pass
-    tx = 0.48 + photo_w + 0.28
-    tw = 34.5 - tx
-    text(
-        slide, tx, hero_y + 0.22, tw, 1.55,
+    # ── héroe claro ───────────────────────────────────────
+    hy, hh = 6.16, 5.72
+    rect(slide, 0.36, hy, 34.71, hh, HERO_BG, line=BORDER, adj=0.016)
+    ph, pw = hh - 0.36, 5.05
+    picture(slide, HERO_SRC, 0.54, hy + 0.18, pw, ph, focus="top")
+    tx = 0.54 + pw + 0.42
+    tw = 34.71 - tx + 0.18
+    box(
+        slide,
+        tx,
+        hy + 0.22,
+        9.4,
+        0.48,
+        CHIP,
         [
-            T("Un androide que escucha, mira y responde", 26, True, WHITE, "Arial", sa=6, ls=1.0),
-            T("R-ONE pertenece al semillero Prometeo. Une visión, conversación en español y movimiento del cuerpo en un miniPC.", 16, False, RGBColor(0xD6, 0xE4, 0xF0), ls=1.12),
+            T(
+                "Semillero Prometeo  ·  Universidad Libre",
+                16,
+                True,
+                TEAL_DEEP,
+                TITLE,
+                PP_ALIGN.CENTER,
+                ls=1.0,
+            )
+        ],
+        adj=0.4,
+        pad=(0.1, 0.1, 0.04, 0.04),
+    )
+    text(
+        slide,
+        tx,
+        hy + 0.82,
+        tw,
+        1.55,
+        [
+            T(
+                "Un androide que escucha, mira y responde",
+                36,
+                True,
+                SLATE,
+                TITLE,
+                sa=8,
+                ls=1.02,
+            ),
+            T(
+                "R-ONE ve a quien tiene delante, conversa en español y gesticula desde un miniPC.",
+                24,
+                False,
+                MUTED,
+                ls=1.16,
+            ),
         ],
     )
-    steps = [
-        ("Escucha", "micrófono"),
-        ("Ve", "cámaras"),
-        ("Comprende", "la escena"),
-        ("Responde", "en español"),
-        ("Se mueve", "voz y gesto"),
-    ]
-    sw = (tw - 0.16 * 4) / 5
-    fills = (CYAN_INK, RGBColor(0x0E, 0x4A, 0x72), EMERALD, RGBColor(0x0E, 0x6B, 0x8A), CYAN_INK)
-    for i, ((name, sub), fill) in enumerate(zip(steps, fills)):
-        box(
-            slide, tx + i * (sw + 0.16), hero_y + 2.05, sw, 2.15, fill,
-            [
-                T(str(i + 1), 14, True, CYAN, "Arial", PP_ALIGN.CENTER, sa=4, ls=1.0),
-                T(name, 18, True, WHITE, "Arial", PP_ALIGN.CENTER, sa=4, ls=1.0),
-                T(sub, 13, False, RGBColor(0xD6, 0xE4, 0xF0), "Arial", PP_ALIGN.CENTER, ls=1.0),
-            ],
-            adj=0.12,
-        )
+    chevrons(
+        slide,
+        tx,
+        hy + 2.52,
+        tw,
+        1.42,
+        [
+            ("Escucha", "micrófono", TEAL_DEEP, WHITE),
+            ("Ve", "cámaras", SAGE_DEEP, WHITE),
+            ("Comprende", "la escena", TEAL_DEEP, WHITE),
+            ("Responde", "en español", SAGE_DEEP, WHITE),
+            ("Se mueve", "voz y gesto", TEAL_DEEP, WHITE),
+        ],
+    )
+    text(
+        slide,
+        tx,
+        hy + 4.12,
+        tw,
+        hh - 4.32,
+        [
+            T(
+                "Una pregunta a la vez. Entra por el chat o por el micrófono. Sale en voz y, si hay un gesto válido en el catálogo, también en el cuerpo.",
+                22,
+                False,
+                MUTED,
+                ls=1.2,
+            )
+        ],
+        anchor=MSO_ANCHOR.MIDDLE,
+    )
 
     # ── columnas ──────────────────────────────────────────
-    L, GAP, W = 0.32, 0.22, 11.45
-    C = L + W + GAP
-    R = C + W + GAP
-    TOP = 11.0
-    COL_BOT = 40.55
-    PAD = 0.22
+    M, G = 0.38, 0.30
+    W = (35.43 - 2 * M - 2 * G) / 3
+    L, C, R = M, M + W + G, M + 2 * (W + G)
+    TOP, BOT = 12.08, 38.72
+    PAD = 0.32
     IW = W - 2 * PAD
-    BODY = 15
 
-    # 01
+    # 01 Introducción
     xi = L + PAD
     card = Card(slide, L, TOP, W, "01", "Introducción")
-    y = flow_text(slide, xi, card.body, IW, [
-        T("R-ONE es un androide de tamaño humano. El cuerpo parte del diseño abierto InMoov: cabeza, brazos y manos impresos, movidos por servomotores.", BODY, sa=8, ls=1.12),
-        T("El semillero le añadió cámaras, un micrófono, un parlante y un miniPC. Hoy reconoce a los integrantes, conversa por el chat o por la voz y ejecuta gestos diseñados en un estudio web.", BODY, ls=1.12),
-    ])
-    b1 = card.close(y + 0.22)
+    y = flow_text(
+        slide,
+        xi,
+        card.body,
+        IW,
+        [
+            T(
+                "R-ONE es un androide de tamaño humano del semillero Prometeo, en la Universidad Libre. El cuerpo parte de InMoov: cabeza, brazos y manos impresos en 3D, movidos por servomotores.",
+                BODY,
+                sa=16,
+                ls=1.22,
+            ),
+            T(
+                "Le pusimos cámaras, micrófono, parlante y un miniPC Jetson. Hoy reconoce a los integrantes, conversa en español y ejecuta gestos diseñados en un estudio web.",
+                BODY,
+                ls=1.22,
+            ),
+        ],
+    )
+    b1 = card.close(y + 0.28)
 
-    # 02
-    card = Card(slide, L, b1 + GAP, W, "02", "Descripción del problema")
-    y = flow_text(slide, xi, card.body, IW, [
-        T("Conversar de verdad exige tres cosas a la vez: ver a la persona, entender la pregunta y mover el cuerpo.", BODY, sa=8, ls=1.12),
-        T("Eso tiene que ocurrir en el propio robot, con un computador modesto y sin depender siempre de internet. Si falla la visión, la voz o el gesto, la conversación se corta.", BODY, ls=1.12),
-    ])
-    quote = [
-        T("La pregunta entra por el chat o por el micrófono. La respuesta sale en voz y, si hay un gesto válido, también en el cuerpo.", 15, False, NAVY, i=True, ls=1.12),
-    ]
-    qh = measure(quote, IW - 0.4) + 0.36
-    rect(slide, xi, y + 0.16, IW, qh, AIR, line=BORDER, adj=0.08)
-    shape(slide, MSO_SHAPE.RECTANGLE, xi, y + 0.16, 0.1, qh, RED)
-    text(slide, xi + 0.28, y + 0.16, IW - 0.4, qh, quote, anchor=MSO_ANCHOR.MIDDLE)
-    b2 = card.close(y + 0.16 + qh + 0.22)
+    # 02 Problema
+    card = Card(slide, L, b1 + G, W, "02", "El problema")
+    y = flow_text(
+        slide,
+        xi,
+        card.body,
+        IW,
+        [
+            T(
+                "Conversar de verdad pide tres cosas a la vez: ver a la persona, entender la pregunta y mover el cuerpo. Si una de las tres falla, la conversación se corta.",
+                BODY,
+                sa=16,
+                ls=1.22,
+            ),
+            T(
+                "Eso tiene que ocurrir en el propio robot, con un computador modesto y sin depender siempre de internet. Por eso existe una mesa de control: para ver si el robot está libre y lanzar un gesto con Normal o Neutro.",
+                BODY,
+                ls=1.22,
+            ),
+        ],
+    )
+    b2 = card.close(y + 0.28)
 
-    # 03 objetivos llenan hasta COL_BOT
-    card = Card(slide, L, b2 + GAP, W, "03", "Objetivos")
+    # 03 Objetivos
+    card = Card(slide, L, b2 + G, W, "03", "Objetivos")
     gen = [
-        T("OBJETIVO GENERAL", 12, True, CYAN, "Arial", sa=4, ls=1.0),
-        T("Percibir a las personas, conversar en español y responder con voz y gesto, desde un miniPC.", 16, False, WHITE, ls=1.12),
+        T("Objetivo general", 18, True, TEAL_DEEP, TITLE, sa=8, ls=1.0),
+        T(
+            "Percibir a las personas, conversar en español y responder con voz y gesto, integrando visión, lenguaje y control en un miniPC.",
+            24,
+            False,
+            INK,
+            ls=1.2,
+        ),
     ]
-    gh = measure(gen, IW - 0.4) + 0.28
+    gh = measure(gen, IW - 0.48) + 0.5
     y = card.body
-    box(slide, xi, y, IW, gh, NAVY, gen, adj=0.1, pad=(0.18, 0.18, 0.1, 0.1))
-    y += gh + 0.14
+    box(
+        slide,
+        xi,
+        y,
+        IW,
+        gh,
+        MIST,
+        gen,
+        line=BORDER,
+        adj=0.07,
+        pad=(0.24, 0.24, 0.16, 0.16),
+    )
+    y += gh + 0.22
     specs = [
-        ("Percibir", "Reconocer a los integrantes con un detector propio y seguirlos entre cámaras."),
-        ("Conversar", "Responder con una memoria propia y, si no hay red, con un modelo local."),
-        ("Mover", "Diseñar secuencias en un estudio y lanzarlas desde la mesa de control."),
+        (
+            SAGE,
+            "Percibir",
+            "Reconocer a los integrantes del semillero con un detector propio, entrenado con nuestras imágenes, y seguirlos cuando pasan de una cámara a otra.",
+        ),
+        (
+            TEAL_DEEP,
+            "Conversar",
+            "Responder en español con una memoria propia. Si la pregunta no está ahí, usar la nube; si no hay red, un modelo local en el miniPC.",
+        ),
+        (
+            SLATE,
+            "Mover",
+            "Diseñar secuencias de cabeza, brazos y manos en un estudio web, y lanzarlas desde la mesa de control con el par Normal y Neutro.",
+        ),
     ]
-    row = 1.35
-    for n, (verb, rest) in enumerate(specs):
-        rect(slide, xi, y, IW, row, (CARD, AIR)[n % 2], line=BORDER, adj=0.1)
+    row = (BOT - 0.22 - y - 0.18 * 2) / 3
+    for n, (fill, verb, para) in enumerate(specs):
+        rect(slide, xi, y, IW, row, AIR if n % 2 else CARD, line=BORDER, adj=0.07)
         box(
-            slide, xi + 0.14, y + (row - 0.5) / 2, 0.5, 0.5, (NAVY, EMERALD, CYAN_INK)[n],
-            [T(str(n + 1), 16, True, WHITE, "Arial", PP_ALIGN.CENTER, ls=1.0)],
-            kind=MSO_SHAPE.OVAL, pad=(0, 0, 0, 0),
+            slide,
+            xi + 0.16,
+            y + 0.22,
+            0.7,
+            0.7,
+            fill,
+            [T(str(n + 1), 22, True, WHITE, TITLE, PP_ALIGN.CENTER, ls=1.0)],
+            kind=MSO_SHAPE.OVAL,
+            pad=(0, 0, 0, 0),
         )
         text(
-            slide, xi + 0.78, y, IW - 0.95, row,
-            [T(verb, 16, True, NAVY, "Arial", sa=2, ls=1.0), T(rest, 14, ls=1.08)],
-            anchor=MSO_ANCHOR.MIDDLE,
+            slide,
+            xi + 1.02,
+            y + 0.12,
+            IW - 1.18,
+            row - 0.2,
+            [
+                T(verb, 26, True, SLATE, TITLE, sa=8, ls=1.0),
+                T(para, BODY, False, INK, ls=1.2),
+            ],
         )
-        y += row + 0.1
-    y += 0.06
-    y = flow_text(slide, xi, y, IW, [
-        T("El estudio de secuencias", 15, True, NAVY, "Arial", ls=1.0),
-    ])
-    y += 0.06
-    hs = picture(slide, ASSETS / "cap-studio.png", xi, y, IW)
-    y += hs + 0.04
-    y = flow_text(slide, xi, y, IW, [
-        T("Ahí se arma el gesto, en cian, y su reposo. Luego el panel lo lanza con Normal o Neutro.", 13, False, MUTED, i=True, ls=1.05),
-    ])
-    card.close(y + 0.18)
+        y += row + 0.18
+    card.close(BOT)
 
-    # 04 metodología
+    # 04 Metodología
     xi = C + PAD
     card = Card(slide, C, TOP, W, "04", "Metodología")
-    y = flow_text(slide, xi, card.body, IW, [
-        T("Dos caminos se encuentran en el miniPC: el cuerpo, que ejecuta, y la mente, que decide qué decir y qué mover.", BODY, ls=1.12),
-    ])
-    y += 0.12
-    half = (IW - 0.16) / 2
-    lanes = [
-        ("Cuerpo", NAVY, [
-            "InMoov impreso en 3D",
-            "Servos SG90 y DS5160",
-            "4 placas PCA9685 por I2C",
-            "Arduino Mega, puerto serie",
-        ]),
-        ("Mente", CYAN_INK, [
-            "802 imágenes, 25 clases",
-            "Detector YOLO11s",
-            "Web, gateway y NATS",
-            "Turno en la Jetson",
-        ]),
-    ]
-    lane_h = 2.55
-    for i, (name, fill, lines) in enumerate(lanes):
-        lx = xi + i * (half + 0.16)
-        rect(slide, lx, y, half, lane_h, CARD, line=BORDER, adj=0.08)
-        box(slide, lx, y, half, 0.42, fill, [T(name, 15, True, WHITE, "Arial", PP_ALIGN.CENTER, ls=1.0)], adj=0.0, pad=(0, 0, 0, 0))
-        text(
-            slide, lx + 0.12, y + 0.5, half - 0.2, lane_h - 0.55,
-            [T(line, 13, sa=4, ls=1.05) for line in lines],
+    y = flow_text(
+        slide,
+        xi,
+        card.body,
+        IW,
+        [
+            T(
+                "El trabajo tiene dos caminos que se encuentran en el miniPC. El cuerpo ejecuta el movimiento. La mente decide qué decir y qué gesto lanzar.",
+                BODY,
+                ls=1.22,
+            ),
+        ],
+    )
+    y += 0.2
+    for name, fill, para, bg in (
+        (
+            "Cuerpo",
+            SAGE_DEEP,
+            "El androide es InMoov impreso en 3D. Lo mueven servos SG90 y DS5160, cuatro placas PCA9685 por I2C y un Arduino Mega por puerto serie.",
+            CHIP_SAGE,
+        ),
+        (
+            "Mente",
+            TEAL_DEEP,
+            "La mente parte de 802 imágenes y 25 clases, un detector YOLO11s, la web con gateway y NATS, y el turno de conversación en la Jetson.",
+            CHIP,
+        ),
+    ):
+        items = [
+            T(name, 22, True, fill, TITLE, sa=8, ls=1.0),
+            T(para, BODY, False, INK, ls=1.2),
+        ]
+        lh = measure(items, IW - 0.48) + 0.42
+        box(
+            slide,
+            xi,
+            y,
+            IW,
+            lh,
+            bg,
+            items,
+            anchor=MSO_ANCHOR.TOP,
+            line=BORDER,
+            adj=0.07,
+            pad=(0.22, 0.22, 0.16, 0.16),
         )
-    y += lane_h + 0.16
-    y = flow_text(slide, xi, y, IW, [T("De la pregunta al gesto", 15, True, NAVY, "Arial", ls=1.0)])
-    y += 0.08
-    chain = [("Chat", NAVY), ("Visión", CYAN_INK), ("Memoria", EMERALD), ("Voz", NAVY), ("Gesto", CYAN_INK)]
-    cw = (IW - 0.1 * 4) / 5
-    for i, (lab, fill) in enumerate(chain):
-        box(slide, xi + i * (cw + 0.1), y, cw, 0.48, fill, [T(lab, 12, True, WHITE, "Arial", PP_ALIGN.CENTER, ls=1.0)], adj=0.2, pad=(0.02, 0.02, 0, 0))
-    y += 0.62
-    y = flow_text(slide, xi, y, IW, [
-        T("Si la pregunta ya está en la memoria, responde al momento. Si no, usa la nube o, sin internet, Gemma en el miniPC. El gesto solo sale si está en el catálogo.", 14, False, MUTED, ls=1.08),
-    ])
-    # hardware thumbs under methodology if space
-    y += 0.1
-    hw = (IW - 0.16) / 2
-    # cabeza is wide diagram; show mano + antebrazo as pair and cabeza full width if room
-    remain = COL_BOT - y - 0.2
-    if remain > 3.2:
-        cap_h = picture(slide, ASSETS / "cabeza.jpeg", xi, y, IW * 0.48)
-        picture(slide, ASSETS / "mano.jpeg", xi + IW * 0.52, y, IW * 0.48)
-        y += max(cap_h, picture.__defaults__ and 0 or cap_h) 
-        # picture already drawn; height is cap_h if same aspect roughly. mano may differ.
-        with Image.open(ASSETS / "mano.jpeg") as im:
-            mh = (IW * 0.48) * im.height / im.width
-        y = y - cap_h + max(cap_h, mh) + 0.08
-        y = flow_text(slide, xi, y, IW, [
-            T("Cabeza (17 servos SG90) y un brazo (10 canales). El antebrazo lleva un servo por dedo.", 13, False, MUTED, i=True, ls=1.05),
-        ])
-    card.close(max(y + 0.16, COL_BOT) if y + 0.16 < COL_BOT + 0.4 else y + 0.16)
-    # force card to COL_BOT if content is shorter
-    if y + 0.16 < COL_BOT:
-        card.close(COL_BOT)
+        y += lh + 0.16
+    y = flow_text(
+        slide,
+        xi,
+        y,
+        IW,
+        [
+            T("De la pregunta al gesto", 26, True, SLATE, TITLE, sa=10, ls=1.0),
+            T(
+                "La pregunta entra por el chat o el micrófono. El detector mira a la persona y BLIP describe la escena. Si esa pregunta ya está en la memoria, R-ONE responde al momento. Si no, usa la nube o, sin internet, Gemma en el miniPC. El gesto solo se mueve si está en el catálogo de esa llamada.",
+                BODY,
+                ls=1.22,
+            ),
+        ],
+    )
+    y += 0.18
+    chevrons(
+        slide,
+        xi,
+        y,
+        IW,
+        1.18,
+        [
+            ("Chat", "o micrófono", TEAL_DEEP, WHITE),
+            ("Visión", "YOLO y BLIP", SAGE_DEEP, WHITE),
+            ("Memoria", "o Gemma", TEAL_DEEP, WHITE),
+            ("Voz", "y gesto", SAGE_DEEP, WHITE),
+        ],
+    )
+    y += 1.36
+    cw = (IW - 0.16 * 2) / 3
+    for i, (val, lab, fill, ink) in enumerate(
+        (
+            ("17", "servos en la cabeza", CHIP, TEAL_DEEP),
+            ("4", "placas PCA9685", CHIP_SAGE, SAGE_DEEP),
+            ("10", "canales por brazo", CHIP, TEAL_DEEP),
+        )
+    ):
+        soft_chip(slide, xi + i * (cw + 0.16), y, cw, 1.62, val, lab, fill, ink)
+    y += 1.8
+    remain = BOT - 0.18 - y
+    img_h = picture_contain(
+        slide, ASSETS / "cabeza.jpeg", xi, y, IW, max(2.6, remain - 0.72)
+    )
+    y += img_h + 0.1
+    y = flow_text(
+        slide,
+        xi,
+        y,
+        IW,
+        [
+            T(
+                "Cabeza: 17 servos SG90 sobre PCA9685. El Arduino solo recibe posición y velocidad.",
+                CAP,
+                False,
+                MUTED,
+                i=True,
+                ls=1.08,
+            ),
+        ],
+    )
+    card.close(max(y + 0.16, BOT))
 
-    # 05 resultados
+    # 05 Resultados
     xi = R + PAD
     card = Card(slide, R, TOP, W, "05", "Resultados")
-    y = card.body
-    cw3 = (IW - 0.16) / 3
-    for i, (val, lab, fill) in enumerate((("0,88", "Precisión", NAVY), ("0,93", "Recall", EMERALD), ("0,94", "mAP50", CYAN_INK))):
-        chip(slide, xi + i * (cw3 + 0.08), y, cw3, 1.15, val, lab, fill)
-    y += 1.28
-    ch = picture(slide, ASSETS / "yolo-curves.png", xi, y, IW)
-    y += ch + 0.04
-    y = flow_text(slide, xi, y, IW, [
-        T("YOLO11s, 25 clases del semillero, 60 épocas. Manda la corrida train5.", 12, False, MUTED, i=True, ls=1.05),
-    ])
-    y += 0.06
-    hv = picture(slide, ASSETS / "cap-vision.png", xi, y, IW)
-    y += hv + 0.02
-    y = flow_text(slide, xi, y, IW, [
-        T("Visión: el detector nombra al integrante y sigue el rostro en las cámaras.", 12, False, MUTED, i=True, ls=1.02),
-    ])
-    y += 0.04
-    shot_w = (IW - 0.12) / 2
-    h3 = picture(slide, ASSETS / "cap-chat.png", xi, y, shot_w)
-    h4 = picture(slide, ASSETS / "cap-panel.png", xi + shot_w + 0.12, y, shot_w)
-    y += max(h3, h4) + 0.02
-    y = flow_text(slide, xi, y, IW, [
-        T("Chat (la fuente queda escrita) y panel: Normal mueve, Neutro vuelve al reposo.", 12, False, MUTED, i=True, ls=1.02),
-    ])
-    b5 = card.close(y + 0.14)
+    y = flow_text(
+        slide,
+        xi,
+        card.body,
+        IW,
+        [
+            T(
+                "El detector propio se entrenó con 802 imágenes y 25 clases: cada clase es un integrante del semillero, no una persona genérica. En la corrida train5, YOLO11s llega a 0,88 de precisión, 0,93 de recall y 0,94 de mAP50, en 60 épocas.",
+                BODY,
+                ls=1.22,
+            ),
+        ],
+    )
+    y += 0.18
+    cw3 = (IW - 0.14) / 3
+    for i, (val, lab, fill, ink) in enumerate(
+        (
+            ("0,88", "Precisión", CHIP, TEAL_DEEP),
+            ("0,93", "Recall", CHIP_SAGE, SAGE_DEEP),
+            ("0,94", "mAP50", CHIP, TEAL_DEEP),
+        )
+    ):
+        soft_chip(slide, xi + i * (cw3 + 0.07), y, cw3, 1.58, val, lab, fill, ink)
+    y += 1.74
+    y = flow_text(
+        slide,
+        xi,
+        y,
+        IW,
+        [
+            T(
+                "En la mesa de control eso se ve en vivo: el sistema nombra a la persona y la sigue entre cámaras. Aquí, Johel Arias.",
+                BODY,
+                ls=1.2,
+            ),
+        ],
+    )
+    y += 0.16
+    vis = ASSETS / "_cap-vision.png"
+    with Image.open(ASSETS / "cap-vision.png") as im:
+        im.convert("RGB").crop((52, 328, im.width, im.height)).save(vis)
+    vis_h = min(4.5, IW * im_aspect(vis))
+    picture(slide, vis, xi, y, IW, vis_h, focus="center")
+    b5 = card.close(y + vis_h + 0.22)
 
-    # 06 conclusiones
-    card = Card(slide, R, b5 + GAP, W, "06", "Conclusiones")
+    # 06 Conclusiones
+    card = Card(slide, R, b5 + G, W, "06", "Conclusiones")
     blocks = [
-        (EMERALD, "El lazo cierra.", "Una pregunta recorre visión, memoria y voz, y puede terminar en un gesto."),
-        (CYAN_INK, "El detector reconoce al semillero.", "En train5 el mAP50 llega a 0,94. La clase es un integrante, no una persona genérica."),
-        (NAVY, "El cuerpo ya tiene lenguaje.", "Cabeza, brazos y manos se mueven con secuencias de gesto y de reposo."),
-        (RED, "Queda trabajo.", "Varios gestos aún no tienen descripción, y la GPU de la Jetson no se usa."),
+        (
+            SAGE,
+            "El lazo ya cierra.",
+            "Una pregunta recorre visión, memoria y voz. Si el catálogo trae un gesto válido, el cuerpo también responde.",
+        ),
+        (
+            TEAL_DEEP,
+            "El detector reconoce al semillero.",
+            "En train5 el mAP50 llega a 0,94. La clase es un integrante, no un rostro anónimo.",
+        ),
+        (
+            SLATE,
+            "El cuerpo ya tiene lenguaje.",
+            "Cabeza, brazos y manos se mueven con el par gesto y reposo, diseñado en el estudio web.",
+        ),
+        (
+            RED,
+            "Todavía falta trabajo.",
+            "Varios gestos aún no tienen descripción, y la GPU de la Jetson no se está usando.",
+        ),
     ]
     y = card.body
-    avail = COL_BOT - y - 0.12
-    bh = (avail - 0.1 * 3) / 4
-    for i, (color, title, body) in enumerate(blocks):
-        rect(slide, xi, y, IW, bh, CARD, line=BORDER, adj=0.1)
-        shape(slide, MSO_SHAPE.RECTANGLE, xi, y, 0.1, bh, color)
+    avail = BOT - 0.2 - y
+    bh = (avail - 0.16 * 3) / 4
+    for color, title, body in blocks:
+        rect(slide, xi, y, IW, bh, CARD, line=BORDER, adj=0.07)
+        shape(slide, MSO_SHAPE.RECTANGLE, xi, y, 0.12, bh, color)
         text(
-            slide, xi + 0.24, y, IW - 0.36, bh,
-            [T(title, 14, True, NAVY, "Arial", sa=2, ls=1.0), T(body, 13, ls=1.08)],
+            slide,
+            xi + 0.34,
+            y,
+            IW - 0.5,
+            bh,
+            [
+                T(title, 24, True, SLATE, TITLE, sa=8, ls=1.0),
+                T(body, BODY, False, INK, ls=1.2),
+            ],
             anchor=MSO_ANCHOR.MIDDLE,
         )
-        y += bh + 0.1
-    card.close(COL_BOT)
+        y += bh + 0.16
+    card.close(BOT)
 
-    # ── eventos ───────────────────────────────────────────
-    ey = 40.72
-    rect(slide, 0.32, ey, 34.79, 3.55, CARD, line=BORDER, adj=0.02)
-    text(slide, 0.5, ey + 0.08, 20, 0.36, [T("R-ONE en eventos de divulgación", 16, True, NAVY, "Arial", ls=1.0)])
-    ew = (34.4 - 0.14 * 3) / 4
-    for i in range(4):
-        picture(slide, ASSETS / f"foto-evento-{i+1}.jpg", 0.48 + i * (ew + 0.14), ey + 0.48, ew)
+    # ── tres fotos de eventos, proporción propia ──────────
+    ey, eh = 38.92, 5.72
+    rect(slide, M, ey, 35.43 - 2 * M, eh, CARD, line=BORDER, adj=0.02)
+    pic_h = eh - 0.28
+    py = ey + 0.14
+    portrait_w = pic_h * 0.58
+    group_w = pic_h * 1.72
+    gap = 0.18
+    x0 = M + 0.16
+    picture(slide, EVENT_A, x0, py, portrait_w, pic_h, focus="center")
+    x0 += portrait_w + gap
+    picture(slide, EVENT_B, x0, py, group_w, pic_h, focus="people")
+    x0 += group_w + gap
+    picture(slide, EVENT_C, x0, py, group_w, pic_h, focus="people")
+    x0 += group_w + 0.28
+    cap_w = 35.43 - M - 0.2 - x0
+    text(
+        slide,
+        x0,
+        py,
+        cap_w,
+        pic_h,
+        [
+            T("R-ONE en divulgación", 28, True, SLATE, TITLE, sa=14, ls=1.05),
+            T(
+                "El semillero Prometeo saca al androide del laboratorio. El cuerpo es InMoov. La mente corre en un miniPC: escucha, mira y responde.",
+                22,
+                False,
+                MUTED,
+                ls=1.22,
+            ),
+        ],
+        anchor=MSO_ANCHOR.MIDDLE,
+    )
 
     # ── referencias ───────────────────────────────────────
-    ry = 44.42
-    rect(slide, 0.32, ry, 34.79, 2.35, NAVY, adj=0.02)
-    text(slide, 0.5, ry + 0.08, 10, 0.36, [T("07  Referencias", 16, True, WHITE, "Arial", ls=1.0)])
+    ry = 44.78
+    rect(slide, M, ry, 35.43 - 2 * M, 2.08, SLATE, adj=0.02)
+    text(
+        slide,
+        M + 0.24,
+        ry + 0.1,
+        18,
+        0.4,
+        [T("07   Referencias", 20, True, WHITE, TITLE, ls=1.0)],
+    )
     refs_a = [
         "[1] Ultralytics. Documentación de YOLO11.",
         "[2] Li et al. BLIP. ICML, 2022.",
@@ -490,18 +899,36 @@ def main() -> None:
         "[7] Alphacephei. Vosk, reconocimiento de voz.",
         "[8] Rhasspy. Piper, síntesis de voz.",
     ]
-    text(slide, 0.5, ry + 0.5, 16.6, 1.7, [T(r, 13, False, WHITE, sa=3, ls=1.05) for r in refs_a])
-    text(slide, 17.4, ry + 0.5, 16.6, 1.7, [T(r, 13, False, WHITE, sa=3, ls=1.05) for r in refs_b])
+    text(
+        slide,
+        M + 0.24,
+        ry + 0.55,
+        16.8,
+        1.4,
+        [T(r, 16, False, WHITE, sa=4, ls=1.08) for r in refs_a],
+    )
+    text(
+        slide,
+        18.3,
+        ry + 0.55,
+        16.6,
+        1.4,
+        [T(r, 16, False, WHITE, sa=4, ls=1.08) for r in refs_b],
+    )
 
     prs.save(str(OUTPUT))
     warns = preview(OUTPUT, PREVIEW)
-    for w in warns:
-        print(w)
+    for tmp in ASSETS.glob("_*.png"):
+        tmp.unlink(missing_ok=True)
+    for tmp in ASSETS.glob("_*.jpg"):
+        tmp.unlink(missing_ok=True)
+    for wmsg in warns:
+        print(wmsg)
     print("Wrote", OUTPUT)
     print("Preview", PREVIEW, "warnings:", len(warns))
 
 
-def preview(pptx_path: Path, out: Path, dpi: int = 28) -> list[str]:
+def preview(pptx_path: Path, out: Path, dpi: int = 34) -> list[str]:
     prs = Presentation(str(pptx_path))
     slide = prs.slides[0]
     W = int(prs.slide_width / 914400 * dpi)
@@ -513,18 +940,21 @@ def preview(pptx_path: Path, out: Path, dpi: int = 28) -> list[str]:
     def px(v):
         return v / 914400 * dpi
 
-    shapes = list(slide.shapes)
-    for sh in shapes:
+    for sh in slide.shapes:
         x, y, w, h = px(sh.left), px(sh.top), px(sh.width), px(sh.height)
         if sh.shape_type == MSO_SHAPE_TYPE.PICTURE:
             tmp = ASSETS / "_pv.png"
             tmp.write_bytes(sh.image.blob)
-            im = Image.open(tmp).convert("RGB").resize((max(1, int(w)), max(1, int(h))), Image.Resampling.LANCZOS)
-            canvas.paste(im, (int(x), int(y)))
+            im = (
+                Image.open(tmp)
+                .convert("RGBA")
+                .resize((max(1, int(w)), max(1, int(h))), Image.Resampling.LANCZOS)
+            )
+            canvas.paste(im, (int(x), int(y)), im)
             tmp.unlink(missing_ok=True)
             continue
         if sh.shape_type == MSO_SHAPE_TYPE.LINE:
-            d.line((x, y, x + w, y + h), fill=HEX["red"], width=max(2, dpi // 16))
+            d.line((x, y, x + w, y + h), fill=HEX["red"], width=max(2, dpi // 14))
             continue
         if sh.shape_type == MSO_SHAPE_TYPE.AUTO_SHAPE:
             try:
@@ -543,8 +973,26 @@ def preview(pptx_path: Path, out: Path, dpi: int = 28) -> list[str]:
                 kind = None
             if kind == MSO_SHAPE.OVAL:
                 d.ellipse((x, y, x + w, y + h), fill=fill, outline=outline)
+            elif kind in (MSO_SHAPE.CHEVRON, MSO_SHAPE.PENTAGON):
+                k = h * 0.35
+                pts = [
+                    (x, y),
+                    (x + w - k, y),
+                    (x + w, y + h / 2),
+                    (x + w - k, y + h),
+                    (x, y + h),
+                ]
+                if kind == MSO_SHAPE.CHEVRON:
+                    pts.append((x + k, y + h / 2))
+                d.polygon(pts, fill=fill, outline=outline)
             else:
-                d.rounded_rectangle((x, y, x + w, y + h), radius=max(2, min(w, h) * 0.06), fill=fill, outline=outline, width=1)
+                d.rounded_rectangle(
+                    (x, y, x + w, y + h),
+                    radius=max(2, min(w, h) * 0.05),
+                    fill=fill,
+                    outline=outline,
+                    width=1,
+                )
         if not sh.has_text_frame or not sh.text_frame.text.strip():
             continue
         tf = sh.text_frame
@@ -557,11 +1005,16 @@ def preview(pptx_path: Path, out: Path, dpi: int = 28) -> list[str]:
                 continue
             run = p.runs[0]
             sz = run.font.size.pt if run.font.size else 16
-            fam = run.font.name or "Arial"
-            f = _font(sz * dpi / 72 * SCALE.get(fam, 0.9), bool(run.font.bold), bool(run.font.italic))
+            fam = run.font.name or "Nunito"
+            f = _font(
+                sz * dpi / 72 * SCALE.get(fam, 1.0),
+                bool(run.font.bold),
+                bool(run.font.italic),
+                fam,
+            )
             raw_ls = p.line_spacing
             mult = raw_ls if isinstance(raw_ls, float) and raw_ls < 4 else 1.05
-            lh = sz * dpi / 72 * 1.15 * mult
+            lh = sz * dpi / 72 * 1.18 * mult
             try:
                 color = f"#{run.font.color.rgb}"
             except Exception:
@@ -578,8 +1031,10 @@ def preview(pptx_path: Path, out: Path, dpi: int = 28) -> list[str]:
                 lines.append((cur, f, lh, color, p.alignment))
         total = sum(l[2] for l in lines)
         avail = h - mt - mb
-        if total > avail + 2:
-            warnings.append(f"OVERFLOW {total/dpi:.2f}>{avail/dpi:.2f} :: {tf.text[:50]!r}")
+        if total > avail + 2 and tf.text.strip() != "R-ONE":
+            warnings.append(
+                f"OVERFLOW {total / dpi:.2f}>{avail / dpi:.2f} :: {tf.text[:60]!r}"
+            )
         if tf.vertical_anchor == MSO_ANCHOR.MIDDLE:
             cy = y + mt + max(0, (avail - total) / 2)
         else:
